@@ -510,12 +510,13 @@ const localSubmissions = useMemo(() => {
 
         {sections.teams?.listUrl && (
           <p style={{ marginTop: "12px" }}>
-            전체 팀 모집 페이지: <Link to={`/camp?slug=${slug}`}>팀 모집 더 보기</Link>
+            전체 팀 모집 페이지:{" "}
+            <Link to={sections.teams.listUrl}>팀 모집 더 보기</Link>
           </p>
         )}
       </section>
 
-      <section ref={submitRef} style={sectionStyle}>
+        <section ref={submitRef} style={sectionStyle}>
         <h2 style={sectionTitleStyle}>제출</h2>
 
         <p style={{ marginBottom: "8px" }}>
@@ -529,7 +530,7 @@ const localSubmissions = useMemo(() => {
             ))}
           </ul>
         )}
-
+       
         <SubmitSection
   hackathon={{
     slug,

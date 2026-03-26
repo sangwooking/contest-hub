@@ -1,45 +1,7 @@
 import { useMemo, useState } from "react";
-import { useAuth } from "../context/AuthContext";
 import { Link } from "react-router";
-
-const INITIAL_POSTS = [
-  {
-    id: "post-001",
-    category: "자유",
-    title: "이번 주말 해커톤 준비 같이 하실 분 있나요?",
-    content:
-      "주말 동안 아이디어 정리하고 간단한 와이어프레임까지 같이 잡아보실 분 찾습니다.",
-    author: "ContestStarter",
-    createdAt: "2026-03-26T10:30:00",
-  },
-  {
-    id: "post-002",
-    category: "질문",
-    title: "공모전 기획서 분량은 어느 정도가 적당할까요?",
-    content:
-      "처음 제출해보는 거라 너무 길게 써야 할지, 핵심만 간단히 적어야 할지 고민됩니다.",
-    author: "IdeaMaker",
-    createdAt: "2026-03-25T18:10:00",
-  },
-  {
-    id: "post-003",
-    category: "정보",
-    title: "발표 자료 만들 때 심사위원이 보기 좋은 구성 팁",
-    content:
-      "문제 정의 → 해결 방식 → 기대 효과 → 시연 흐름으로 잡으면 전달력이 훨씬 좋아집니다.",
-    author: "SlideRunner",
-    createdAt: "2026-03-24T14:20:00",
-  },
-  {
-    id: "post-004",
-    category: "팀빌딩",
-    title: "디자이너 구하는 분들은 어떤 포트폴리오를 보시나요?",
-    content:
-      "팀원 모집할 때 디자이너 지원자를 볼 때 어떤 기준으로 판단하는지 궁금합니다.",
-    author: "BuildTogether",
-    createdAt: "2026-03-23T21:05:00",
-  },
-];
+import { useAuth } from "../context/AuthContext";
+import { getForumPosts, createForumPost } from "../data/forumStorage";
 
 const CATEGORY_OPTIONS = ["전체", "자유", "질문", "정보", "팀빌딩"];
 
@@ -68,7 +30,7 @@ function buildSearchTarget(post) {
 export default function ForumPage() {
   const { user, isLoggedIn } = useAuth();
 
-  const [posts, setPosts] = useState(INITIAL_POSTS);
+  const [posts, setPosts] = useState(() => getForumPosts());
   const [selectedCategory, setSelectedCategory] = useState("전체");
   const [keyword, setKeyword] = useState("");
   const [showWriteForm, setShowWriteForm] = useState(false);
@@ -127,10 +89,12 @@ export default function ForumPage() {
       content: trimmedContent,
       author: isLoggedIn ? user.nickname : "익명",
       createdAt: new Date().toISOString(),
-      isPreview: true,
+      comments: [],
     };
 
-    setPosts((prev) => [createdPost, ...prev]);
+    const nextPosts = createForumPost(createdPost);
+    setPosts(nextPosts);
+
     setNewPost({
       category: "자유",
       title: "",
@@ -455,7 +419,7 @@ export default function ForumPage() {
               }}
             >
               <p style={{ margin: 0, color: "#374151" }}>
-                지금은 최소 구현 단계라서 실제 서버 저장 대신 <strong>작성 즉시 목록 상단에 반영</strong>되도록 구성했어.
+                게시글 등록 시 목록과 상세 페이지가 같은 데이터로 바로 연결됩니다.
               </p>
             </div>
 
@@ -520,7 +484,7 @@ export default function ForumPage() {
               <article
                 key={post.id}
                 style={{
-                  border: post.isPreview ? "1px solid #2563eb" : "1px solid #e5e7eb",
+                  border: "1px solid #e5e7eb",
                   borderRadius: "12px",
                   padding: "18px",
                   backgroundColor: "#ffffff",
@@ -547,14 +511,15 @@ export default function ForumPage() {
                     >
                       {post.category}
                     </p>
+
                     <h3 style={{ margin: 0, fontSize: "20px" }}>
-                     <Link
+                      <Link
                         to={`/forum/${post.id}`}
                         style={{
                           textDecoration: "none",
                           color: "#111827",
                         }}
-                       >
+                      >
                         {post.title}
                       </Link>
                     </h3>
@@ -586,9 +551,14 @@ export default function ForumPage() {
                     borderTop: "1px solid #f1f5f9",
                     color: "#6b7280",
                     fontSize: "14px",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: "12px",
+                    flexWrap: "wrap",
                   }}
                 >
-                  작성일: {formatDateTime(post.createdAt)}
+                  <span>작성일: {formatDateTime(post.createdAt)}</span>
+                  <span>댓글 {(post.comments || []).length}개</span>
                 </div>
               </article>
             ))}
