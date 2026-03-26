@@ -1,6 +1,9 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import teamsData from "../data/public_teams.json";
+import { useAuth } from "../context/AuthContext";
+
+const CAMP_STORAGE_KEY = "contest-hub-camp-posts";
 
 function formatDateTime(dateString) {
   if (!dateString) return "-";
@@ -57,14 +60,30 @@ function buildSearchTarget(team) {
       team.intro,
       team.hackathonSlug,
       displayLabel,
-      recruitType === "free" ? "자유모집 자유 모집" : "해커톤모집 해커톤 모집 공모전모집 공모전 모집",
+      recruitType === "free"
+        ? "자유모집 자유 모집"
+        : "해커톤모집 해커톤 모집 공모전모집 공모전 모집",
       ...(team.lookingFor || []),
       team.contact?.url,
     ].join(" ")
   );
 }
 
-function TeamRecruitCard({ team }) {
+function getStoredCampPosts() {
+  const savedValue = localStorage.getItem(CAMP_STORAGE_KEY);
+
+  if (!savedValue) return [];
+
+  try {
+    const parsed = JSON.parse(savedValue);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (error) {
+    localStorage.removeItem(CAMP_STORAGE_KEY);
+    return [];
+  }
+}
+
+function TeamRecruitCard({ team, onDelete, onClose }) {
   const recruitType = inferRecruitType(team);
   const hackathonLabel = getDisplayHackathonLabel(team);
 
@@ -147,12 +166,17 @@ function TeamRecruitCard({ team }) {
         <p style={{ margin: "0 0 6px 0" }}>
           <strong>현재 인원:</strong> {team.memberCount ?? "-"}명
         </p>
-        <p style={{ margin: 0 }}>
+        <p style={{ margin: "0 0 6px 0" }}>
           <strong>모집 포지션:</strong>{" "}
           {team.lookingFor && team.lookingFor.length > 0
             ? team.lookingFor.join(", ")
             : "없음"}
         </p>
+        {team.authorNickname && (
+          <p style={{ margin: 0 }}>
+            <strong>작성자:</strong> {team.authorNickname}
+          </p>
+        )}
       </div>
 
       <div
@@ -201,6 +225,40 @@ function TeamRecruitCard({ team }) {
               연락하기
             </a>
           )}
+
+          {team.isCustom && team.isOpen && (
+            <button
+              type="button"
+              onClick={() => onClose?.(team.teamCode)}
+              style={{
+                border: "none",
+                backgroundColor: "transparent",
+                color: "#b45309",
+                fontWeight: 600,
+                cursor: "pointer",
+                padding: 0,
+              }}
+            >
+              모집마감
+            </button>
+          )}
+
+          {team.isCustom && (
+            <button
+              type="button"
+              onClick={() => onDelete?.(team.teamCode)}
+              style={{
+                border: "none",
+                backgroundColor: "transparent",
+                color: "#dc2626",
+                fontWeight: 600,
+                cursor: "pointer",
+                padding: 0,
+              }}
+            >
+              삭제
+            </button>
+          )}
         </div>
       </div>
     </article>
@@ -209,14 +267,17 @@ function TeamRecruitCard({ team }) {
 
 export default function CampPage() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const { user, isLoggedIn } = useAuth();
 
   const selectedSlugFromQuery =
-    searchParams.get("slug") || searchParams.get("hackathon") || "all";
+    searchParams.get("hackathon") || searchParams.get("slug") || "all";
+  const shouldOpenCreateForm = searchParams.get("create") === "1";
 
   const [selectedSlug, setSelectedSlug] = useState(selectedSlugFromQuery);
   const [showOnlyOpen, setShowOnlyOpen] = useState(false);
   const [keyword, setKeyword] = useState("");
-  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [showCreateForm, setShowCreateForm] = useState(shouldOpenCreateForm);
+  const [customTeams, setCustomTeams] = useState(() => getStoredCampPosts());
 
   const [newPost, setNewPost] = useState({
     teamName: "",
@@ -228,53 +289,23 @@ export default function CampPage() {
     contactUrl: "",
   });
 
-  const hackathonOptions = useMemo(() => getHackathonOptions(teamsData), []);
+  useEffect(() => {
+    localStorage.setItem(CAMP_STORAGE_KEY, JSON.stringify(customTeams));
+  }, [customTeams]);
 
-  const previewTeams = useMemo(() => {
-    const formIsReady =
-      newPost.teamName.trim() &&
-      newPost.intro.trim() &&
-      newPost.contactUrl.trim();
+  const allTeamsSource = useMemo(() => {
+    return [...customTeams, ...teamsData];
+  }, [customTeams]);
 
-    if (!formIsReady) return [];
-
-    const normalizedRecruitType = newPost.recruitType;
-    const normalizedHackathonSlug =
-      normalizedRecruitType === "free"
-        ? "free-recruit"
-        : newPost.hackathonSlug.trim() || "open-hackathon";
-
-    return [
-      {
-        teamCode: "NEW-PREVIEW",
-        hackathonSlug: normalizedHackathonSlug,
-        recruitType: normalizedRecruitType,
-        name: newPost.teamName.trim(),
-        isOpen: newPost.isOpen,
-        memberCount: 1,
-        lookingFor: newPost.lookingFor
-          .split(",")
-          .map((item) => item.trim())
-          .filter(Boolean),
-        intro: newPost.intro.trim(),
-        contact: {
-          type: "link",
-          url: newPost.contactUrl.trim(),
-        },
-        createdAt: new Date().toISOString(),
-        isPreview: true,
-      },
-    ];
-  }, [newPost]);
-
-  const allTeams = useMemo(() => {
-    return [...previewTeams, ...teamsData];
-  }, [previewTeams]);
+  const hackathonOptions = useMemo(
+    () => getHackathonOptions(allTeamsSource),
+    [allTeamsSource]
+  );
 
   const filteredTeams = useMemo(() => {
     const keywordLower = normalizeText(keyword);
 
-    return allTeams.filter((team) => {
+    return allTeamsSource.filter((team) => {
       const recruitType = inferRecruitType(team);
 
       const matchesSlug =
@@ -291,7 +322,7 @@ export default function CampPage() {
 
       return matchesSlug && matchesOpen && matchesKeyword;
     });
-  }, [allTeams, selectedSlug, showOnlyOpen, keyword]);
+  }, [allTeamsSource, selectedSlug, showOnlyOpen, keyword]);
 
   const hackathonRecruitTeams = filteredTeams.filter(
     (team) => inferRecruitType(team) === "hackathon"
@@ -308,11 +339,11 @@ export default function CampPage() {
     const nextParams = new URLSearchParams(searchParams);
 
     if (nextSlug === "all") {
+      nextParams.delete("hackathon");
       nextParams.delete("slug");
-      nextParams.delete("hackathon");
     } else {
-      nextParams.set("slug", nextSlug);
-      nextParams.delete("hackathon");
+      nextParams.set("hackathon", nextSlug);
+      nextParams.delete("slug");
     }
 
     setSearchParams(nextParams);
@@ -349,10 +380,77 @@ export default function CampPage() {
     });
   };
 
-  const formIsValid =
-    newPost.teamName.trim() &&
-    newPost.intro.trim() &&
-    newPost.contactUrl.trim();
+  const handleCreatePost = () => {
+    if (!newPost.teamName.trim() || !newPost.intro.trim()) {
+      alert("팀명과 소개는 필수입니다.");
+      return;
+    }
+
+    const normalizedRecruitType = newPost.recruitType;
+    const normalizedHackathonSlug =
+      normalizedRecruitType === "free"
+        ? "free-recruit"
+        : newPost.hackathonSlug.trim() || "open-hackathon";
+
+    const createdTeam = {
+      teamCode: `custom-team-${Date.now()}`,
+      hackathonSlug: normalizedHackathonSlug,
+      recruitType: normalizedRecruitType,
+      name: newPost.teamName.trim(),
+      isOpen: newPost.isOpen,
+      memberCount: 1,
+      lookingFor: newPost.lookingFor
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean),
+      intro: newPost.intro.trim(),
+      contact: newPost.contactUrl.trim()
+        ? {
+            type: "link",
+            url: newPost.contactUrl.trim(),
+          }
+        : null,
+      createdAt: new Date().toISOString(),
+      authorId: user?.id || "guest-user",
+      authorNickname: user?.nickname || "게스트",
+      leaderId: user?.id || "guest-user",
+      isCustom: true,
+    };
+
+    setCustomTeams((prev) => [createdTeam, ...prev]);
+
+    setNewPost({
+      teamName: "",
+      recruitType: normalizedRecruitType,
+      hackathonSlug:
+        normalizedRecruitType === "hackathon" && selectedSlug !== "all"
+          ? selectedSlug
+          : "",
+      intro: "",
+      isOpen: true,
+      lookingFor: "",
+      contactUrl: "",
+    });
+
+    setShowCreateForm(false);
+  };
+
+  const handleDeletePost = (teamCode) => {
+    const ok = window.confirm("이 모집글을 삭제할까요?");
+    if (!ok) return;
+
+    setCustomTeams((prev) => prev.filter((team) => team.teamCode !== teamCode));
+  };
+
+  const handleCloseRecruit = (teamCode) => {
+    setCustomTeams((prev) =>
+      prev.map((team) =>
+        team.teamCode === teamCode ? { ...team, isOpen: false } : team
+      )
+    );
+  };
+
+  const formIsValid = newPost.teamName.trim() && newPost.intro.trim();
 
   return (
     <div>
@@ -500,6 +598,22 @@ export default function CampPage() {
         >
           <h2 style={{ marginTop: 0, marginBottom: "16px" }}>팀 모집글 생성</h2>
 
+          {!isLoggedIn && (
+            <div
+              style={{
+                marginBottom: "16px",
+                padding: "14px",
+                borderRadius: "10px",
+                backgroundColor: "#f8fafc",
+                border: "1px solid #e5e7eb",
+              }}
+            >
+              <p style={{ margin: 0, color: "#374151" }}>
+                로그인하지 않아도 작성은 가능하지만, 작성자는 게스트로 저장됩니다.
+              </p>
+            </div>
+          )}
+
           <div
             style={{
               display: "grid",
@@ -641,7 +755,7 @@ export default function CampPage() {
                 htmlFor="contactUrl"
                 style={{ display: "block", marginBottom: "8px", fontWeight: 600 }}
               >
-                연락 링크 *
+                연락 링크
               </label>
               <input
                 id="contactUrl"
@@ -679,23 +793,10 @@ export default function CampPage() {
             현재 모집중
           </label>
 
-          <div
-            style={{
-              marginTop: "16px",
-              padding: "14px",
-              borderRadius: "10px",
-              backgroundColor: "#f8fafc",
-              border: "1px solid #e5e7eb",
-            }}
-          >
-            <p style={{ margin: 0, color: "#374151" }}>
-              지금은 최소 구현 단계라서 실제 저장 대신 <strong>미리보기 카드</strong>로 목록에 바로 반영되도록 구성했어.
-            </p>
-          </div>
-
           <div style={{ marginTop: "16px" }}>
             <button
               type="button"
+              onClick={handleCreatePost}
               disabled={!formIsValid}
               style={{
                 padding: "10px 14px",
@@ -708,7 +809,7 @@ export default function CampPage() {
                 fontWeight: 600,
               }}
             >
-              모집글 미리보기 반영
+              모집글 생성
             </button>
           </div>
         </section>
@@ -760,7 +861,12 @@ export default function CampPage() {
           ) : (
             <div style={{ display: "grid", gap: "16px" }}>
               {hackathonRecruitTeams.map((team) => (
-                <TeamRecruitCard key={`${team.teamCode}-${team.createdAt}`} team={team} />
+                <TeamRecruitCard
+                  key={`${team.teamCode}-${team.createdAt}`}
+                  team={team}
+                  onDelete={handleDeletePost}
+                  onClose={handleCloseRecruit}
+                />
               ))}
             </div>
           )}
@@ -804,7 +910,12 @@ export default function CampPage() {
           ) : (
             <div style={{ display: "grid", gap: "16px" }}>
               {freeRecruitTeams.map((team) => (
-                <TeamRecruitCard key={`${team.teamCode}-${team.createdAt}`} team={team} />
+                <TeamRecruitCard
+                  key={`${team.teamCode}-${team.createdAt}`}
+                  team={team}
+                  onDelete={handleDeletePost}
+                  onClose={handleCloseRecruit}
+                />
               ))}
             </div>
           )}

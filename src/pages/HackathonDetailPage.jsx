@@ -325,7 +325,7 @@ export default function HackathonDetailPage() {
   {sections.teams?.listUrl && (
   <p style={{ marginTop: "12px" }}>
     전체 팀 모집 페이지:{" "}
-    <Link to={`/camp?slug=${slug}`}>
+    <Link to={`/camp?hackathon=${slug}`}>
       팀 모집 더 보기
     </Link>
   </p>
