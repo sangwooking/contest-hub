@@ -116,9 +116,10 @@ export default function Layout({ children }) {
                   style={{
                     fontSize: "14px",
                     color: "#4b5563",
+                    fontWeight: 600,
                   }}
                 >
-                  안녕하세요,
+                  안녕하세요, {user?.nickname || "사용자"}님!
                 </span>
 
                 <Link
@@ -132,7 +133,7 @@ export default function Layout({ children }) {
                     backgroundColor: "#f3f4f6",
                   }}
                 >
-                  {user?.nickname || "사용자"}
+                  마이페이지
                 </Link>
 
                 <button
