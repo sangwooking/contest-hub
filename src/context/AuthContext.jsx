@@ -1,65 +1,105 @@
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
+import { auth, db } from "../firebase";
+
+import {
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged,
+} from "firebase/auth";
+
+import { doc, setDoc, getDoc } from "firebase/firestore";
 
 const AuthContext = createContext(null);
 
-const STORAGE_KEY = "contest-hub-auth-user";
-
-const MOCK_USER = {
-  id: "user-001",
-  email: "demo@contesthub.com",
-  nickname: "박상우",
-  bio: "공모전과 해커톤 프로젝트를 진행 중입니다.",
-};
-
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const savedUser = localStorage.getItem(STORAGE_KEY);
+  // 🔥 로그인 상태 유지
+useEffect(() => {
+  const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+    try {
+      console.log("firebaseUser:", firebaseUser); // 🔥 디버깅
 
-    if (savedUser) {
-      try {
-        setUser(JSON.parse(savedUser));
-      } catch (error) {
-        localStorage.removeItem(STORAGE_KEY);
+      if (firebaseUser) {
+        const docRef = doc(db, "users", firebaseUser.uid);
+        const docSnap = await getDoc(docRef);
+
+        const userData = docSnap.exists() ? docSnap.data() : {};
+
+        setUser({
+          uid: firebaseUser.uid,
+          email: firebaseUser.email,
+          ...userData,
+        });
+      } else {
+        setUser(null);
       }
+    } catch (error) {
+      console.error("Auth error:", error);
+    } finally {
+      // 🔥 이거 반드시 있어야 함
+      setLoading(false);
     }
-  }, []);
+  });
 
-  const login = ({ email, nickname }) => {
-    const nextUser = {
-      ...MOCK_USER,
-      email: email?.trim() || MOCK_USER.email,
-      nickname: nickname?.trim() || MOCK_USER.nickname,
-    };
+  return () => unsubscribe();
+}, []);
 
-    setUser(nextUser);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(nextUser));
+  // 🔥 회원가입
+  const signup = async ({ email, password, nickname }) => {
+    try {
+      const result = await createUserWithEmailAndPassword(
+        auth,
+        email,
+        password
+      );
+
+      const user = result.user;
+
+      await setDoc(doc(db, "users", user.uid), {
+        nickname,
+        createdAt: new Date().toISOString(),
+      });
+
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, message: error.message };
+    }
   };
 
-  const logout = () => {
-    setUser(null);
-    localStorage.removeItem(STORAGE_KEY);
+  // 🔥 로그인
+  const login = async ({ email, password }) => {
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, message: error.message };
+    }
   };
 
-  const value = useMemo(() => {
-    return {
-      user,
-      isLoggedIn: Boolean(user),
-      login,
-      logout,
-    };
-  }, [user]);
+  // 🔥 로그아웃
+  const logout = async () => {
+    await signOut(auth);
+  };
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider
+      value={{
+        user,
+        isLoggedIn: !!user,
+        signup,
+        login,
+        logout,
+        loading,
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
+  );
 }
 
 export function useAuth() {
-  const context = useContext(AuthContext);
-
-  if (!context) {
-    throw new Error("useAuth must be used within an AuthProvider");
-  }
-
-  return context;
+  return useContext(AuthContext);
 }

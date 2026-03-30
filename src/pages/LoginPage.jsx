@@ -3,7 +3,8 @@ import { useNavigate } from "react-router";
 import { useAuth } from "../context/AuthContext";
 
 export default function LoginPage() {
-  const { login } = useAuth();
+  const { login, signup } = useAuth();
+  const [error, setError] = useState("");
   const navigate = useNavigate();
 
   const [mode, setMode] = useState("login"); // login | signup
@@ -23,19 +24,36 @@ export default function LoginPage() {
     }));
   };
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
+const handleSubmit = async (e) => {
+  e.preventDefault();
 
-    if (!form.email.trim() || !form.password.trim()) return;
+  if (!form.email.trim() || !form.password.trim()) return;
 
-    // 최소 구현: 회원가입/로그인 동일 처리
-    login({
+  if (mode === "signup") {
+    const result = await signup({
       email: form.email,
-      nickname: form.nickname || "사용자",
+      password: form.password,
+      nickname: form.nickname,
     });
 
-    navigate("/user"); // 로그인 후 마이페이지 이동
-  };
+    if (!result.ok) {
+      alert(result.message);
+      return;
+    }
+  } else {
+    const result = await login({
+      email: form.email,
+      password: form.password,
+    });
+
+    if (!result.ok) {
+      alert(result.message);
+      return;
+    }
+  }
+
+  navigate("/user");
+};
 
   return (
     <div>
