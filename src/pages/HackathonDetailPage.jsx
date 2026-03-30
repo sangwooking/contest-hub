@@ -48,12 +48,6 @@ function normalizeText(value) {
   return String(value || "").trim().toLowerCase();
 }
 
-/**
- * 점수 산식 계산
- * 우선순위:
- * 1) sections.eval.scoreDisplay.breakdown 기준으로 entry.metrics / entry[key] / entry.scores 에서 계산
- * 2) 계산 불가능하면 기존 entry.score 사용
- */
 function calculateSubmissionScore(entry, breakdown = []) {
   if (!entry) return null;
 
@@ -108,7 +102,6 @@ function buildLeaderboardRows(teams, leaderboard, breakdown, localSubmissions = 
     const teamKey = normalizeText(entry.teamName);
     if (!teamKey) return;
 
-    // 같은 팀이면 가장 최근 제출로 덮어쓰기
     const prev = mergedMap.get(teamKey);
 
     if (!prev) {
@@ -125,7 +118,6 @@ function buildLeaderboardRows(teams, leaderboard, breakdown, localSubmissions = 
   });
 
   const entries = Array.from(mergedMap.values());
-
   const submissionMap = new Map();
 
   entries.forEach((entry) => {
@@ -182,14 +174,138 @@ function buildLeaderboardRows(teams, leaderboard, breakdown, localSubmissions = 
   }));
 }
 
+function getScoringLabel(scoreBreakdown) {
+  return scoreBreakdown.length > 0 ? "평가" : "기본";
+}
+
+function getLatestLocalTeamName(localSubmissions = []) {
+  if (!Array.isArray(localSubmissions) || localSubmissions.length === 0) {
+    return null;
+  }
+
+  const sorted = [...localSubmissions].sort((a, b) => {
+    const timeA = a?.submittedAt ? new Date(a.submittedAt).getTime() : 0;
+    const timeB = b?.submittedAt ? new Date(b.submittedAt).getTime() : 0;
+    return timeB - timeA;
+  });
+
+  return sorted[0]?.teamName || null;
+}
+
+function buildLeaderboardDisplayRows(rows, myTeamName) {
+  const submittedRows = rows
+    .filter((row) => row.submitted)
+    .sort((a, b) => {
+      const scoreA = a.score ?? -Infinity;
+      const scoreB = b.score ?? -Infinity;
+
+      if (scoreB !== scoreA) return scoreB - scoreA;
+
+      const timeA = a.submittedAt ? new Date(a.submittedAt).getTime() : Infinity;
+      const timeB = b.submittedAt ? new Date(b.submittedAt).getTime() : Infinity;
+
+      return timeA - timeB;
+    });
+
+  const unsubmittedRows = rows.filter((row) => !row.submitted);
+  const topSubmittedRows = submittedRows.slice(0, 10);
+
+  const myTeamRow = myTeamName
+    ? rows.find((row) => normalizeText(row.teamName) === normalizeText(myTeamName))
+    : null;
+
+  const myTeamAlreadyVisibleInTop10 =
+    myTeamRow &&
+    myTeamRow.submitted &&
+    (myTeamRow.rank || 0) <= 10;
+
+  const myTeamOutsideTop10 =
+    myTeamRow &&
+    myTeamRow.submitted &&
+    (myTeamRow.rank || 0) > 10;
+
+  const fillerCount = Math.max(0, 10 - topSubmittedRows.length);
+  const fillerRows = Array.from({ length: fillerCount }, (_, index) => ({
+    type: "filler",
+    key: `filler-${index}`,
+  }));
+
+  const displayRows = [
+    ...topSubmittedRows.map((row) => ({
+      type: "team",
+      key: `submitted-${row.teamCode}`,
+      row,
+      highlightMyTeam:
+        !!myTeamRow &&
+        normalizeText(row.teamName) === normalizeText(myTeamRow.teamName),
+    })),
+    ...fillerRows,
+  ];
+
+  if (myTeamOutsideTop10 && !myTeamAlreadyVisibleInTop10) {
+    displayRows.push({
+      type: "ellipsis",
+      key: "ellipsis-row",
+    });
+
+    displayRows.push({
+      type: "team",
+      key: `my-team-${myTeamRow.teamCode}`,
+      row: myTeamRow,
+      highlightMyTeam: true,
+    });
+  }
+
+  unsubmittedRows.forEach((row) => {
+    displayRows.push({
+      type: "team",
+      key: `unsubmitted-${row.teamCode}`,
+      row,
+      highlightMyTeam:
+        !!myTeamRow &&
+        normalizeText(row.teamName) === normalizeText(myTeamRow.teamName),
+    });
+  });
+
+  return displayRows;
+}
+
 export default function HackathonDetailPage() {
   const { slug } = useParams();
   const detail = useMemo(() => findHackathonDetailBySlug(slug), [slug]);
   const leaderboard = useMemo(() => findLeaderboardBySlug(slug), [slug]);
 
+  const [submissionVersion, setSubmissionVersion] = useState(0);
+
+  useEffect(() => {
+    const handleSubmissionUpdated = () => {
+      setSubmissionVersion((prev) => prev + 1);
+    };
+
+    window.addEventListener("hackathon-submission-updated", handleSubmissionUpdated);
+
+    return () => {
+      window.removeEventListener(
+        "hackathon-submission-updated",
+        handleSubmissionUpdated
+      );
+    };
+  }, []);
+
   const relatedTeams = useMemo(() => {
     return teamsData.filter((team) => team.hackathonSlug === slug);
   }, [slug]);
+
+  const localSubmissions = useMemo(() => {
+    if (typeof window === "undefined") return [];
+
+    try {
+      const saved = JSON.parse(localStorage.getItem("hackathonSubmissions") || "[]");
+      return saved.filter((item) => item.hackathonSlug === slug);
+    } catch (error) {
+      return [];
+    }
+  }, [slug, submissionVersion]);
 
   const overviewRef = useRef(null);
   const infoRef = useRef(null);
@@ -230,40 +346,6 @@ export default function HackathonDetailPage() {
     });
   };
 
-  const [submissionVersion, setSubmissionVersion] = useState(0);
-
-  useEffect(() => {
-    const handleSubmissionUpdated = () => {
-      setSubmissionVersion((prev) => prev + 1);
-    };
-
-    window.addEventListener(
-      "hackathon-submission-updated",
-      handleSubmissionUpdated
-    );
-
-    return () => {
-      window.removeEventListener(
-        "hackathon-submission-updated",
-        handleSubmissionUpdated
-      );
-    };
-  }, []);
-
-  const localSubmissions = (() => {
-    if (typeof window === "undefined") return [];
-
-    try {
-      const saved = JSON.parse(
-        localStorage.getItem("hackathonSubmissions") || "[]"
-      );
-
-      return saved.filter((item) => item.hackathonSlug === slug);
-    } catch (error) {
-      return [];
-    }
-  })();
-
   if (!detail) {
     return (
       <div>
@@ -295,6 +377,12 @@ export default function HackathonDetailPage() {
     localSubmissions
   );
 
+  const myTeamName = getLatestLocalTeamName(localSubmissions);
+  const leaderboardDisplayRows = buildLeaderboardDisplayRows(
+    leaderboardRows,
+    myTeamName
+  );
+
   const allowedFileTypes = Array.from(
     new Set([...(sections.submit?.allowedArtifactTypes || []), "zip"])
   );
@@ -312,6 +400,8 @@ export default function HackathonDetailPage() {
     marginTop: 0,
     marginBottom: "12px",
   };
+
+  const leaderboardRowHeight = 56;
 
   return (
     <div>
@@ -349,13 +439,14 @@ export default function HackathonDetailPage() {
             key={tab.key}
             onClick={() => scrollToSection(tab.key)}
             style={{
-              padding: "8px 14px",
-              borderRadius: "8px",
+              padding: "12px 20px",
+              borderRadius: "10px",
               border: "1px solid #ddd",
               backgroundColor: "#ffffff",
               color: "#111827",
               cursor: "pointer",
-              fontSize: "14px",
+              fontSize: "17px",
+              fontWeight: 600,
             }}
           >
             {tab.label}
@@ -518,7 +609,7 @@ export default function HackathonDetailPage() {
         )}
       </section>
 
-        <section ref={submitRef} style={sectionStyle}>
+      <section ref={submitRef} style={sectionStyle}>
         <h2 style={sectionTitleStyle}>제출</h2>
 
         <p style={{ marginBottom: "8px" }}>
@@ -532,24 +623,54 @@ export default function HackathonDetailPage() {
             ))}
           </ul>
         )}
-       
+
         <SubmitSection
-  hackathon={{
-    slug,
-    submissionConfig: {
-      allowedFileTypes,
-      maxFileSizeMB: 20,
-      description: "결과물을 업로드하세요. ZIP 제출을 권장합니다.",
-    },
-  }}
-  onSubmitted={() => {
-    setSubmissionVersion((prev) => prev + 1);
-  }}
-/>
+          hackathon={{
+            slug,
+            submissionConfig: {
+              allowedFileTypes,
+              maxFileSizeMB: 20,
+              description: "결과물을 업로드하세요. ZIP 제출을 권장합니다.",
+            },
+          }}
+          onSubmitted={() => {
+            setSubmissionVersion((prev) => prev + 1);
+          }}
+        />
       </section>
 
       <section ref={leaderboardRef} style={sectionStyle}>
-        <h2 style={sectionTitleStyle}>리더보드</h2>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            gap: "12px",
+            alignItems: "center",
+            flexWrap: "wrap",
+            marginBottom: "16px",
+          }}
+        >
+          <div>
+            <h2 style={sectionTitleStyle}>리더보드</h2>
+            <p style={{ margin: 0, color: "#6b7280" }}>
+              제출 완료 팀만 순위에 반영됩니다. 미제출 팀은 순위에서 제외됩니다.
+            </p>
+          </div>
+
+          <div
+            style={{
+              padding: "8px 12px",
+              borderRadius: "999px",
+              border: "1px solid #d1d5db",
+              backgroundColor: "#f9fafb",
+              fontSize: "14px",
+              fontWeight: 600,
+              color: "#374151",
+            }}
+          >
+            점수 기준: {getScoringLabel(scoreBreakdown)}
+          </div>
+        </div>
 
         <p style={{ marginBottom: "12px" }}>
           {sections.leaderboard?.note || "리더보드 안내가 없습니다."}
@@ -561,64 +682,183 @@ export default function HackathonDetailPage() {
               업데이트: {formatDateTime(leaderboard.updatedAt)}
             </p>
 
-            {leaderboardRows.length > 0 ? (
-              <div style={{ display: "grid", gap: "12px" }}>
-                {leaderboardRows.map((row) => (
-                  <div
-                    key={row.teamCode}
-                    style={{
-                      border: "1px solid #e5e7eb",
-                      borderRadius: "12px",
-                      padding: "16px",
-                      backgroundColor: "#ffffff",
-                    }}
-                  >
-                    <p style={{ margin: "0 0 8px 0", fontWeight: 700 }}>
-                      {row.submitted ? `#${row.rank}` : "-"} {row.teamName}
-                    </p>
+            {leaderboardDisplayRows.length > 0 ? (
+              <div style={{ overflowX: "auto" }}>
+                <table
+                  style={{
+                    width: "100%",
+                    minWidth: "900px",
+                    borderCollapse: "collapse",
+                    backgroundColor: "#ffffff",
+                  }}
+                >
+                  <thead>
+                    <tr
+                      style={{
+                        borderBottom: "1px solid #e5e7eb",
+                        textAlign: "left",
+                      }}
+                    >
+                      <th style={{ padding: "12px 10px" }}>순위</th>
+                      <th style={{ padding: "12px 10px" }}>팀명</th>
+                      <th style={{ padding: "12px 10px" }}>제출 여부</th>
+                      <th style={{ padding: "12px 10px" }}>점수</th>
+                      <th style={{ padding: "12px 10px" }}>제출일</th>
+                    </tr>
+                  </thead>
 
-                    {row.submitted ? (
-                      <>
-                        <p style={{ margin: "0 0 8px 0" }}>
-                          점수: {row.score ?? "-"}
-                        </p>
+                  <tbody>
+                    {leaderboardDisplayRows.map((item) => {
+                      if (item.type === "filler") {
+                        return (
+                          <tr key={item.key} style={{ borderBottom: "1px solid #f8fafc" }}>
+                            <td
+                              colSpan={5}
+                              style={{
+                                height: `${leaderboardRowHeight}px`,
+                                padding: "0 10px",
+                              }}
+                            />
+                          </tr>
+                        );
+                      }
 
-                        <p style={{ margin: "0 0 8px 0", color: "#6b7280" }}>
-                          제출일: {formatDateTime(row.submittedAt)}
-                        </p>
+                      if (item.type === "ellipsis") {
+                        return (
+                          <tr key={item.key} style={{ borderBottom: "1px solid #f1f5f9" }}>
+                            <td
+                              colSpan={5}
+                              style={{
+                                padding: "14px 10px",
+                                textAlign: "center",
+                                color: "#9ca3af",
+                                letterSpacing: "4px",
+                                fontWeight: 600,
+                              }}
+                            >
+                              ...
+                            </td>
+                          </tr>
+                        );
+                      }
 
-                        {scoreBreakdown.length > 0 && (
-                          <div
-                            style={{
-                              marginTop: "8px",
-                              paddingTop: "8px",
-                              borderTop: "1px solid #f3f4f6",
-                              fontSize: "14px",
-                              color: "#4b5563",
-                            }}
-                          >
-                            {scoreBreakdown.map((item) => {
-                              const rawMetric =
-                                row.submission?.metrics?.[item.key] ??
-                                row.submission?.scores?.[item.key] ??
-                                row.submission?.[item.key];
+                      const row = item.row;
+                      const isMine = item.highlightMyTeam;
 
-                              return (
-                                <p key={item.key} style={{ margin: "0 0 4px 0" }}>
-                                  {item.label}: {rawMetric ?? "-"} ({item.weightPercent}%)
-                                </p>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </>
-                    ) : (
-                      <p style={{ margin: 0, color: "#9ca3af", fontWeight: 600 }}>
-                        미제출
-                      </p>
-                    )}
-                  </div>
-                ))}
+                      return (
+                        <tr
+                          key={item.key}
+                          style={{
+                            borderBottom: "1px solid #f1f5f9",
+                            backgroundColor: isMine
+                              ? "#eff6ff"
+                              : row.submitted
+                              ? "#ffffff"
+                              : "#fafafa",
+                            verticalAlign: "top",
+                          }}
+                        >
+                          <td style={{ padding: "14px 10px", fontWeight: 700 }}>
+                            {row.submitted ? (
+                              `#${row.rank}`
+                            ) : (
+                              <span
+                                style={{
+                                  display: "inline-block",
+                                  padding: "6px 10px",
+                                  borderRadius: "999px",
+                                  fontSize: "13px",
+                                  fontWeight: 700,
+                                  backgroundColor: "#fef2f2",
+                                  color: "#dc2626",
+                                  border: "1px solid #fecaca",
+                                }}
+                              >
+                                미제출
+                              </span>
+                            )}
+                          </td>
+
+                          <td style={{ padding: "14px 10px" }}>
+                            <p style={{ margin: "0 0 6px 0", fontWeight: 600 }}>
+                              {row.teamName}
+                              {isMine && (
+                                <span
+                                  style={{
+                                    marginLeft: "8px",
+                                    color: "#2563eb",
+                                    fontWeight: 600,
+                                  }}
+                                >
+                                  (내 팀)
+                                </span>
+                              )}
+                            </p>
+
+                            {scoreBreakdown.length > 0 && row.submitted && (
+                              <div style={{ fontSize: "13px", color: "#6b7280" }}>
+                                {scoreBreakdown.map((scoreItem) => {
+                                  const rawMetric =
+                                    row.submission?.metrics?.[scoreItem.key] ??
+                                    row.submission?.scores?.[scoreItem.key] ??
+                                    row.submission?.[scoreItem.key];
+
+                                  return (
+                                    <p key={scoreItem.key} style={{ margin: "0 0 4px 0" }}>
+                                      {scoreItem.label}: {rawMetric ?? "-"} ({scoreItem.weightPercent}%)
+                                    </p>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </td>
+
+                          <td style={{ padding: "14px 10px" }}>
+                            {row.submitted ? (
+                              <span
+                                style={{
+                                  display: "inline-block",
+                                  padding: "6px 10px",
+                                  borderRadius: "999px",
+                                  fontSize: "13px",
+                                  fontWeight: 700,
+                                  backgroundColor: "#ecfdf5",
+                                  color: "#047857",
+                                  border: "1px solid #a7f3d0",
+                                }}
+                              >
+                                제출
+                              </span>
+                            ) : (
+                              <span
+                                style={{
+                                  display: "inline-block",
+                                  padding: "6px 10px",
+                                  borderRadius: "999px",
+                                  fontSize: "13px",
+                                  fontWeight: 700,
+                                  backgroundColor: "#fef2f2",
+                                  color: "#dc2626",
+                                  border: "1px solid #fecaca",
+                                }}
+                              >
+                                미제출
+                              </span>
+                            )}
+                          </td>
+
+                          <td style={{ padding: "14px 10px", fontWeight: 700 }}>
+                            {row.submitted ? row.score ?? "-" : "-"}
+                          </td>
+
+                          <td style={{ padding: "14px 10px", color: "#6b7280" }}>
+                            {row.submitted ? formatDateTime(row.submittedAt) : "-"}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             ) : (
               <p>참가 팀 정보가 없습니다.</p>
@@ -626,15 +866,6 @@ export default function HackathonDetailPage() {
           </div>
         ) : (
           <p>현재 공개된 리더보드 데이터가 없습니다.</p>
-        )}
-
-        {sections.leaderboard?.publicLeaderboardUrl && (
-          <p style={{ marginTop: "12px", marginBottom: 0 }}>
-            리더보드 경로:{" "}
-            <Link to={sections.leaderboard.publicLeaderboardUrl}>
-              {sections.leaderboard.publicLeaderboardUrl}
-            </Link>
-          </p>
         )}
       </section>
     </div>
