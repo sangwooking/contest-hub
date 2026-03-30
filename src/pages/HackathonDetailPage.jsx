@@ -273,15 +273,9 @@ function buildLeaderboardDisplayRows(rows, myTeamName) {
 export default function HackathonDetailPage() {
   const { slug } = useParams();
   const detail = useMemo(() => findHackathonDetailBySlug(slug), [slug]);
-  const [leaderboard, setLeaderboard] = useState(null);
+  const leaderboard = useMemo(() => findLeaderboardBySlug(slug), [slug]);
+
   const [submissionVersion, setSubmissionVersion] = useState(0);
-
-  useEffect(() => {
-    if (!slug) return;
-
-    const data = findLeaderboardBySlug(slug);
-    setLeaderboard(data);
-  }, [slug]);
 
   useEffect(() => {
     const handleSubmissionUpdated = () => {
@@ -399,7 +393,7 @@ export default function HackathonDetailPage() {
     padding: "20px",
     backgroundColor: "#ffffff",
     marginBottom: "20px",
-    scrollMarginTop: "90px",
+    scrollMarginTop: "150px",
   };
 
   const sectionTitleStyle = {
@@ -428,12 +422,13 @@ export default function HackathonDetailPage() {
       <div
         style={{
           position: "sticky",
-          top: 0,
-          zIndex: 10,
+          top: "72px",
+          zIndex: 100,
           backgroundColor: "#ffffff",
           padding: "12px 0",
           marginBottom: "24px",
           borderBottom: "1px solid #e5e7eb",
+          boxShadow: "0 2px 8px rgba(0, 0, 0, 0.06)",
           display: "flex",
           gap: "10px",
           flexWrap: "wrap",
