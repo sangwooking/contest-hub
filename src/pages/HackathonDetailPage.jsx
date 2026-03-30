@@ -510,12 +510,11 @@ const localSubmissions = useMemo(() => {
           <p>현재 등록된 팀 모집글이 없습니다.</p>
         )}
 
-
         {sections.teams?.listUrl && (
           <p style={{ marginTop: "12px" }}>
             전체 팀 모집 페이지:{" "}
             <Link to={sections.teams.listUrl}>팀 모집 더 보기</Link>
-          </p>
+        </p>
         )}
       </section>
 
