@@ -1,27 +1,7 @@
 import { useParams, Link } from "react-router";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useAuth } from "../context/AuthContext";
-
-const MOCK_POSTS = [
-  {
-    id: "post-001",
-    category: "자유",
-    title: "이번 주말 해커톤 준비 같이 하실 분 있나요?",
-    content:
-      "주말 동안 아이디어 정리하고 간단한 와이어프레임까지 같이 잡아보실 분 찾습니다.",
-    author: "ContestStarter",
-    createdAt: "2026-03-26T10:30:00",
-  },
-  {
-    id: "post-002",
-    category: "질문",
-    title: "공모전 기획서 분량은 어느 정도가 적당할까요?",
-    content:
-      "처음 제출해보는 거라 너무 길게 써야 할지 고민됩니다.",
-    author: "IdeaMaker",
-    createdAt: "2026-03-25T18:10:00",
-  },
-];
+import { getForumPostById, addForumComment } from "../data/forumStorage";
 
 function formatDateTime(dateString) {
   if (!dateString) return "-";
@@ -33,9 +13,36 @@ export default function ForumDetailPage() {
   const { postId } = useParams();
   const { isLoggedIn, user } = useAuth();
 
-  const post = useMemo(() => {
-    return MOCK_POSTS.find((item) => item.id === postId);
+  const initialPost = useMemo(() => {
+    return getForumPostById(postId);
   }, [postId]);
+
+  const [post, setPost] = useState(initialPost);
+  const [commentText, setCommentText] = useState("");
+
+  const handleSubmitComment = (event) => {
+    event.preventDefault();
+
+    if (!isLoggedIn) {
+      alert("댓글을 작성하려면 로그인해 주세요.");
+      return;
+    }
+
+    const trimmedComment = commentText.trim();
+
+    if (!trimmedComment) return;
+
+    const createdComment = {
+      id: `comment-${Date.now()}`,
+      author: user?.nickname || "사용자",
+      content: trimmedComment,
+      createdAt: new Date().toISOString(),
+    };
+
+    const updatedPost = addForumComment(postId, createdComment);
+    setPost(updatedPost);
+    setCommentText("");
+  };
 
   if (!post) {
     return (
@@ -98,7 +105,6 @@ export default function ForumDetailPage() {
         </div>
       </section>
 
-      {/* 댓글 영역 (최소 버전) */}
       <section
         style={{
           marginTop: "20px",
@@ -108,17 +114,126 @@ export default function ForumDetailPage() {
           backgroundColor: "#ffffff",
         }}
       >
-        <h2 style={{ marginTop: 0 }}>댓글 (준비중)</h2>
+        <h2 style={{ marginTop: 0, marginBottom: "16px" }}>
+          댓글 {(post.comments || []).length}개
+        </h2>
 
         {isLoggedIn ? (
-          <p style={{ color: "#6b7280" }}>
-            {user.nickname}님, 댓글 기능은 다음 단계에서 구현됩니다.
-          </p>
+          <form onSubmit={handleSubmitComment}>
+            <div
+              style={{
+                display: "grid",
+                gap: "12px",
+              }}
+            >
+              <textarea
+                value={commentText}
+                onChange={(event) => setCommentText(event.target.value)}
+                rows={4}
+                placeholder="댓글을 입력하세요."
+                style={{
+                  width: "100%",
+                  padding: "12px",
+                  borderRadius: "8px",
+                  border: "1px solid #d1d5db",
+                  backgroundColor: "#ffffff",
+                  boxSizing: "border-box",
+                  resize: "vertical",
+                }}
+              />
+
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  gap: "12px",
+                  flexWrap: "wrap",
+                }}
+              >
+                <p style={{ margin: 0, color: "#6b7280", fontSize: "14px" }}>
+                  {user.nickname}님으로 댓글을 작성합니다.
+                </p>
+
+                <button
+                  type="submit"
+                  disabled={!commentText.trim()}
+                  style={{
+                    padding: "10px 14px",
+                    borderRadius: "8px",
+                    border: "1px solid #111827",
+                    backgroundColor: commentText.trim() ? "#111827" : "#9ca3af",
+                    color: "#ffffff",
+                    cursor: commentText.trim() ? "pointer" : "not-allowed",
+                    fontSize: "14px",
+                    fontWeight: 600,
+                  }}
+                >
+                  댓글 등록
+                </button>
+              </div>
+            </div>
+          </form>
         ) : (
-          <p style={{ color: "#6b7280" }}>
+          <div
+            style={{
+              padding: "14px",
+              borderRadius: "10px",
+              backgroundColor: "#f8fafc",
+              border: "1px solid #e5e7eb",
+              color: "#6b7280",
+            }}
+          >
             댓글을 작성하려면 로그인해 주세요.
-          </p>
+          </div>
         )}
+
+        <div style={{ marginTop: "20px" }}>
+          {(post.comments || []).length === 0 ? (
+            <p style={{ margin: 0, color: "#6b7280" }}>
+              아직 작성된 댓글이 없습니다.
+            </p>
+          ) : (
+            <div style={{ display: "grid", gap: "12px" }}>
+              {post.comments.map((comment) => (
+                <article
+                  key={comment.id}
+                  style={{
+                    border: "1px solid #e5e7eb",
+                    borderRadius: "10px",
+                    padding: "16px",
+                    backgroundColor: "#ffffff",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      gap: "12px",
+                      flexWrap: "wrap",
+                      marginBottom: "10px",
+                    }}
+                  >
+                    <strong style={{ color: "#111827" }}>{comment.author}</strong>
+                    <span style={{ color: "#6b7280", fontSize: "14px" }}>
+                      {formatDateTime(comment.createdAt)}
+                    </span>
+                  </div>
+
+                  <div
+                    style={{
+                      color: "#374151",
+                      lineHeight: 1.6,
+                      whiteSpace: "pre-wrap",
+                    }}
+                  >
+                    {comment.content}
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </div>
       </section>
     </div>
   );
