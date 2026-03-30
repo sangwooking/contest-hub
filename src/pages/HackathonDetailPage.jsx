@@ -185,14 +185,7 @@ function buildLeaderboardRows(teams, leaderboard, breakdown, localSubmissions = 
 export default function HackathonDetailPage() {
   const { slug } = useParams();
   const detail = useMemo(() => findHackathonDetailBySlug(slug), [slug]);
-  const [leaderboard, setLeaderboard] = useState(null);
-
-  useEffect(() => {
-    if (!slug) return;
-
-    const data = findLeaderboardBySlug(slug);
-    setLeaderboard(data);
-  }, [slug]);
+  const leaderboard = useMemo(() => findLeaderboardBySlug(slug), [slug]);
 
   const relatedTeams = useMemo(() => {
     return teamsData.filter((team) => team.hackathonSlug === slug);
@@ -237,6 +230,40 @@ export default function HackathonDetailPage() {
     });
   };
 
+  const [submissionVersion, setSubmissionVersion] = useState(0);
+
+  useEffect(() => {
+    const handleSubmissionUpdated = () => {
+      setSubmissionVersion((prev) => prev + 1);
+    };
+
+    window.addEventListener(
+      "hackathon-submission-updated",
+      handleSubmissionUpdated
+    );
+
+    return () => {
+      window.removeEventListener(
+        "hackathon-submission-updated",
+        handleSubmissionUpdated
+      );
+    };
+  }, []);
+
+  const localSubmissions = (() => {
+    if (typeof window === "undefined") return [];
+
+    try {
+      const saved = JSON.parse(
+        localStorage.getItem("hackathonSubmissions") || "[]"
+      );
+
+      return saved.filter((item) => item.hackathonSlug === slug);
+    } catch (error) {
+      return [];
+    }
+  })();
+
   if (!detail) {
     return (
       <div>
@@ -259,40 +286,14 @@ export default function HackathonDetailPage() {
   }
 
   const { sections } = detail;
-
   const scoreBreakdown = sections.eval?.scoreDisplay?.breakdown || [];
-  const [submissionVersion, setSubmissionVersion] = useState(0);
-
-useEffect(() => {
-  const handleSubmissionUpdated = () => {
-    setSubmissionVersion((prev) => prev + 1);
-  };
-
-  window.addEventListener("hackathon-submission-updated", handleSubmissionUpdated);
-
-  return () => {
-    window.removeEventListener("hackathon-submission-updated", handleSubmissionUpdated);
-  };
-}, []);
-
-const localSubmissions = useMemo(() => {
-  if (typeof window === "undefined") return [];
-
-  try {
-    const saved = JSON.parse(localStorage.getItem("hackathonSubmissions") || "[]");
-
-    return saved.filter((item) => item.hackathonSlug === slug);
-  } catch (error) {
-    return [];
-  }
-}, [slug, submissionVersion]);
 
   const leaderboardRows = buildLeaderboardRows(
-  relatedTeams,
-  leaderboard,
-  scoreBreakdown,
-  localSubmissions
-);
+    relatedTeams,
+    leaderboard,
+    scoreBreakdown,
+    localSubmissions
+  );
 
   const allowedFileTypes = Array.from(
     new Set([...(sections.submit?.allowedArtifactTypes || []), "zip"])
@@ -304,7 +305,7 @@ const localSubmissions = useMemo(() => {
     padding: "20px",
     backgroundColor: "#ffffff",
     marginBottom: "20px",
-    scrollMarginTop: "90px",
+    scrollMarginTop: "150px",
   };
 
   const sectionTitleStyle = {
@@ -331,12 +332,13 @@ const localSubmissions = useMemo(() => {
       <div
         style={{
           position: "sticky",
-          top: 0,
-          zIndex: 10,
+          top: "72px",
+          zIndex: 100,
           backgroundColor: "#ffffff",
           padding: "12px 0",
           marginBottom: "24px",
           borderBottom: "1px solid #e5e7eb",
+          boxShadow: "0 2px 8px rgba(0, 0, 0, 0.06)",
           display: "flex",
           gap: "10px",
           flexWrap: "wrap",
