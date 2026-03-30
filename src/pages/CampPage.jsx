@@ -83,7 +83,7 @@ function getStoredCampPosts() {
   }
 }
 
-function TeamRecruitCard({ team, onDelete, onClose }) {
+function TeamRecruitCard({ team, onDelete, onClose, onContact }) {
   const recruitType = inferRecruitType(team);
   const hackathonLabel = getDisplayHackathonLabel(team);
 
@@ -212,20 +212,21 @@ function TeamRecruitCard({ team, onDelete, onClose }) {
           ) : null}
 
           {team.contact?.url && (
-            <a
-              href={team.contact.url}
-              target="_blank"
-              rel="noreferrer"
-              style={{
-                textDecoration: "none",
-                color: "#111827",
-                fontWeight: 600,
-              }}
-            >
-              연락하기
-            </a>
-          )}
-
+            <button
+            type="button"
+            onClick={() => onContact?.(team.contact.url)}
+            style={{
+              border: "none",
+              backgroundColor: "transparent",
+              color: "#111827",
+              fontWeight: 600,
+              cursor: "pointer",
+              padding: 0,
+            }}
+          >
+            연락하기
+          </button>
+        )}
           {team.isCustom && team.isOpen && (
             <button
               type="button"
@@ -278,6 +279,11 @@ export default function CampPage() {
   const [keyword, setKeyword] = useState("");
   const [showCreateForm, setShowCreateForm] = useState(shouldOpenCreateForm);
   const [customTeams, setCustomTeams] = useState(() => getStoredCampPosts());
+  const [noticeModal, setNoticeModal] = useState({
+    open: false,
+    mode: null, // "create" | "contact"
+    targetUrl: "",
+  });
 
   const [newPost, setNewPost] = useState({
     teamName: "",
@@ -378,6 +384,42 @@ export default function CampPage() {
         [name]: nextValue,
       };
     });
+  };
+
+  const openCreateNoticeModal = () => {
+    setNoticeModal({
+      open: true,
+      mode: "create",
+      targetUrl: "",
+    });
+  };
+  
+  const openContactNoticeModal = (url) => {
+    setNoticeModal({
+      open: true,
+      mode: "contact",
+      targetUrl: url || "",
+    });
+  };
+  
+  const closeNoticeModal = () => {
+    setNoticeModal({
+      open: false,
+      mode: null,
+      targetUrl: "",
+    });
+  };
+  
+  const confirmNoticeModal = () => {
+    if (noticeModal.mode === "create") {
+      handleCreatePost();
+    }
+  
+    if (noticeModal.mode === "contact" && noticeModal.targetUrl) {
+      window.open(noticeModal.targetUrl, "_blank", "noopener,noreferrer");
+    }
+  
+    closeNoticeModal();
   };
 
   const handleCreatePost = () => {
@@ -796,17 +838,17 @@ export default function CampPage() {
           <div style={{ marginTop: "16px" }}>
             <button
               type="button"
-              onClick={handleCreatePost}
+              onClick={openCreateNoticeModal}
               disabled={!formIsValid}
               style={{
-                padding: "10px 14px",
-                borderRadius: "8px",
-                border: "1px solid #111827",
-                backgroundColor: formIsValid ? "#111827" : "#9ca3af",
-                color: "#ffffff",
-                cursor: formIsValid ? "pointer" : "not-allowed",
-                fontSize: "14px",
-                fontWeight: 600,
+              padding: "10px 14px",
+              borderRadius: "8px",
+              border: "1px solid #111827",
+              backgroundColor: formIsValid ? "#111827" : "#9ca3af",
+              color: "#ffffff",
+              cursor: formIsValid ? "pointer" : "not-allowed",
+              fontSize: "14px",
+              fontWeight: 600,
               }}
             >
               모집글 생성
@@ -866,6 +908,7 @@ export default function CampPage() {
                   team={team}
                   onDelete={handleDeletePost}
                   onClose={handleCloseRecruit}
+                  onContact={openContactNoticeModal}
                 />
               ))}
             </div>
@@ -915,12 +958,100 @@ export default function CampPage() {
                   team={team}
                   onDelete={handleDeletePost}
                   onClose={handleCloseRecruit}
+                  onContact={openContactNoticeModal}
                 />
               ))}
             </div>
           )}
         </div>
       </section>
+      {noticeModal.open && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            backgroundColor: "rgba(0, 0, 0, 0.45)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 9999,
+            padding: "20px",
+          }}
+        >
+          <div
+            style={{
+              width: "100%",
+              maxWidth: "520px",
+              backgroundColor: "#ffffff",
+              borderRadius: "16px",
+              padding: "24px",
+              boxShadow: "0 20px 40px rgba(0,0,0,0.15)",
+            }}
+          >
+            <h2 style={{ marginTop: 0, marginBottom: "14px" }}>
+              {noticeModal.mode === "create"
+                ? "팀 모집글 작성 전 유의사항"
+                : "팀 문의 전 유의사항"}
+            </h2>
+
+            <p style={{ marginTop: 0, marginBottom: "12px", color: "#4b5563" }}>
+              자세한 내용은 나중에 추가하고, 지금은 임시 안내 문구를 넣어둔 상태입니다.
+            </p>
+
+            <ul
+              style={{
+                paddingLeft: "20px",
+                marginTop: 0,
+                marginBottom: "20px",
+                lineHeight: 1.7,
+              }}
+            >
+              <li>공모전 주제와 팀 목표를 먼저 확인해 주세요.</li>
+              <li>모집 포지션과 역할 분담을 명확히 작성하거나 확인해 주세요.</li>
+              <li>연락 가능한 시간과 협업 방식을 미리 조율해 주세요.</li>
+              <li>예의 없는 문의나 장난성 신청은 제한될 수 있습니다.</li>
+            </ul>
+
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                gap: "10px",
+              }}
+            >
+              <button
+                type="button"
+                onClick={closeNoticeModal}
+                style={{
+                  padding: "10px 14px",
+                  borderRadius: "8px",
+                  border: "1px solid #d1d5db",
+                  backgroundColor: "#ffffff",
+                  cursor: "pointer",
+                }}
+              >
+                취소
+              </button>
+
+              <button
+                type="button"
+                onClick={confirmNoticeModal}
+                style={{
+                  padding: "10px 14px",
+                  borderRadius: "8px",
+                  border: "1px solid #2563eb",
+                  backgroundColor: "#2563eb",
+                  color: "#ffffff",
+                  cursor: "pointer",
+                  fontWeight: 600,
+                }}
+              >
+                확인하고 계속
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
