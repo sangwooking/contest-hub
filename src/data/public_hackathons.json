@@ -6,7 +6,8 @@
     "tags": [
       "LLM",
       "Compression",
-      "vLLM"
+      "vLLM",
+      "AI","데이터"
     ],
     "thumbnailUrl": "https://example.com/public/img/aimers8.png",
     "period": {
@@ -27,7 +28,8 @@
     "tags": [
       "Idea",
       "GenAI",
-      "Workflow"
+      "Workflow",
+      "AI"
     ],
     "thumbnailUrl": "https://example.com/public/img/vibe202602.png",
     "period": {
@@ -49,7 +51,8 @@
       "VibeCoding",
       "Web",
       "Vercel",
-      "Handover"
+      "Handover",
+      "데이터"
     ],
     "thumbnailUrl": "https://example.com/public/img/daker-handover-202603.png",
     "period": {
