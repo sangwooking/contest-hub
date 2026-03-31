@@ -34,11 +34,14 @@ function AppRoutes() {
           <Route path="/forum/:postId" element={<ForumDetailPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="*" element={<NotFoundPage />} />
+          <Route path="/mypage/:userId" element={<UserPage />} />
         </Routes>
       </Layout>
     </BrowserRouter>
   );
 }
+
+
 
 export default function App() {
   return (
