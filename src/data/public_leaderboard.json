@@ -49,6 +49,13 @@
             "pdfUrl": "https://example.com/lgtm-solution.pdf",
             "planTitle": "LGTM 기획서"
           }
+        },
+
+        {
+          "rank": 1,
+          "teamName": "A팀",
+          "nickname": "홍길동",
+          "userId": "user_123"
         }
       ]
     }

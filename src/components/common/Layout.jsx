@@ -21,6 +21,11 @@ export default function Layout({ children }) {
   const location = useLocation();
   const { user, isLoggedIn, logout } = useAuth();
 
+  const profileImage = user?.profileImage || user?.photoURL || "";
+  const profileFallback = String(user?.nickname || user?.email || "U")
+    .slice(0, 1)
+    .toUpperCase();
+
   return (
     <div
       style={{
@@ -112,28 +117,38 @@ export default function Layout({ children }) {
           >
             {isLoggedIn ? (
               <>
-                <span
-                  style={{
-                    fontSize: "14px",
-                    color: "#4b5563",
-                    fontWeight: 600,
-                  }}
-                >
-                  안녕하세요, {user?.nickname || "사용자"}님!
-                </span>
-
                 <Link
-                  to="/user"
+                  to={`/mypage/${user?.uid}`}
+                  title="마이페이지"
                   style={{
-                    textDecoration: "none",
-                    color: "#111827",
-                    fontWeight: 700,
-                    padding: "8px 10px",
-                    borderRadius: "8px",
+                    width: "42px",
+                    height: "42px",
+                    borderRadius: "999px",
+                    overflow: "hidden",
+                    border: "1px solid #e5e7eb",
                     backgroundColor: "#f3f4f6",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    textDecoration: "none",
+                    color: "#6b7280",
+                    fontWeight: 700,
+                    flexShrink: 0,
                   }}
                 >
-                  마이페이지
+                  {profileImage ? (
+                    <img
+                      src={profileImage}
+                      alt="프로필"
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        objectFit: "cover",
+                      }}
+                    />
+                  ) : (
+                    <span style={{ fontSize: "13px" }}>{profileFallback}</span>
+                  )}
                 </Link>
 
                 <button

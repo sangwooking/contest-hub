@@ -20,14 +20,23 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       try {
+        console.log("firebaseUser:", firebaseUser);
         setError("");
-
+  
         if (firebaseUser) {
-          const docRef = doc(db, "users", firebaseUser.uid);
-          const docSnap = await getDoc(docRef);
-
-          const userData = docSnap.exists() ? docSnap.data() : {};
-
+          let userData = {};
+  
+          try {
+            const docRef = doc(db, "users", firebaseUser.uid);
+            const docSnap = await getDoc(docRef);
+  
+            if (docSnap.exists()) {
+              userData = docSnap.data();
+            }
+          } catch (firestoreError) {
+            console.error("Firestore read error:", firestoreError);
+          }
+  
           setUser({
             uid: firebaseUser.uid,
             email: firebaseUser.email,
@@ -44,7 +53,7 @@ export function AuthProvider({ children }) {
         setLoading(false);
       }
     });
-
+  
     return () => unsubscribe();
   }, []);
 

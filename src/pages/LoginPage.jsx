@@ -45,11 +45,25 @@ export default function LoginPage() {
     setError("");
     clearError();
 
-    if (!form.email.trim() || !form.password.trim()) {
-      setError("이메일과 비밀번호를 모두 입력해 주세요.");
+
+  if (!form.email.trim() || !form.password.trim()) {
+    alert("이메일과 비밀번호를 입력해주세요");
+    return;
+  }
+
+  if (mode === "signup") {
+    const result = await signup({
+      email: form.email,
+      password: form.password,
+      nickname: form.nickname,
+    });
+
+    if (!result.ok) {
+      alert(result.message);
+
       return;
     }
-
+  }
     if (mode === "signup" && !form.nickname.trim()) {
       setError("회원가입 시 닉네임을 입력해 주세요.");
       return;

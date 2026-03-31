@@ -59,6 +59,43 @@ function getLatestUpdatedAtTimestamp(boards) {
   return Math.max(...timestamps);
 }
 
+function renderUserLink(entry) {
+  const nickname =
+    entry.nickname ||
+    entry.userNickname ||
+    entry.memberNickname ||
+    entry.ownerNickname ||
+    "-";
+
+  const userId =
+    entry.userId ||
+    entry.uid ||
+    entry.memberId ||
+    entry.ownerId ||
+    null;
+
+  if (nickname === "-") {
+    return <span>-</span>;
+  }
+
+  if (!userId) {
+    return <span>{nickname}</span>;
+  }
+
+  return (
+    <Link
+      to={`/mypage/${userId}`}
+      style={{
+        textDecoration: "none",
+        color: "#2563eb",
+        fontWeight: 600,
+      }}
+    >
+      {nickname}
+    </Link>
+  );
+}
+
 export default function RankingsPage() {
   const [selectedSlug, setSelectedSlug] = useState("all");
   const [keyword, setKeyword] = useState("");
@@ -86,6 +123,9 @@ export default function RankingsPage() {
               normalizeText(
                 [
                   entry.teamName,
+                  entry.nickname,
+                  entry.userNickname,
+                  entry.memberNickname,
                   board.hackathonSlug,
                   entry.score,
                   entry.scoreBreakdown?.participant,
@@ -279,7 +319,7 @@ export default function RankingsPage() {
               type="text"
               value={keyword}
               onChange={(event) => setKeyword(event.target.value)}
-              placeholder="팀명, 기획서명, 점수 검색"
+              placeholder="팀명, 닉네임, 기획서명, 점수 검색"
               style={{
                 width: "100%",
                 padding: "10px 12px",
@@ -438,6 +478,13 @@ export default function RankingsPage() {
                           marginBottom: "12px",
                         }}
                       >
+                        <div>
+                          <p style={{ margin: "0 0 6px 0", color: "#6b7280" }}>
+                            사용자
+                          </p>
+                          <p style={{ margin: 0 }}>{renderUserLink(entry)}</p>
+                        </div>
+
                         <div>
                           <p style={{ margin: "0 0 6px 0", color: "#6b7280" }}>
                             제출일
