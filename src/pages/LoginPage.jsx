@@ -27,7 +27,10 @@ export default function LoginPage() {
 const handleSubmit = async (e) => {
   e.preventDefault();
 
-  if (!form.email.trim() || !form.password.trim()) return;
+  if (!form.email.trim() || !form.password.trim()) {
+    alert("이메일과 비밀번호를 입력해주세요");
+    return;
+  }
 
   if (mode === "signup") {
     const result = await signup({

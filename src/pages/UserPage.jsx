@@ -3,10 +3,18 @@ import { Link, useParams } from "react-router";
 import { useAuth } from "../context/AuthContext";
 import teamsData from "../data/public_teams.json";
 
-function formatDateTime(dateString) {
-  if (!dateString) return "-";
+function formatDateTime(value) {
+  if (!value) return "-";
 
-  return new Date(dateString).toLocaleString("ko-KR", {
+  if (typeof value === "object" && value?.toDate) {
+    return value.toDate().toLocaleString("ko-KR", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    });
+  }
+
+  return new Date(value).toLocaleString("ko-KR", {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
@@ -40,9 +48,6 @@ export default function UserPage() {
   const pageUser = useMemo(() => {
     if (!isLoggedIn) return null;
 
-    // 현재는 Firebase 상세 조회 연결 전 최소 구현
-    // userId가 있더라도 지금은 로그인 유저 정보 기반으로 먼저 보여주고,
-    // 나중에 Firebase users 컬렉션 조회로 바꾸기 쉽게 구조만 잡아둠
     return {
       id: userId || user?.uid || "me",
       nickname: user?.nickname || "닉네임 없음",
@@ -59,7 +64,6 @@ export default function UserPage() {
   const myTeams = useMemo(() => {
     if (!isLoggedIn) return [];
 
-    // 최소 구현용
     return teamsData.slice(0, 3);
   }, [isLoggedIn]);
 

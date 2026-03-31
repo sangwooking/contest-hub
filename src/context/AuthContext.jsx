@@ -20,13 +20,21 @@ export function AuthProvider({ children }) {
 useEffect(() => {
   const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
     try {
-      console.log("firebaseUser:", firebaseUser); // 🔥 디버깅
+      console.log("firebaseUser:", firebaseUser);
 
       if (firebaseUser) {
-        const docRef = doc(db, "users", firebaseUser.uid);
-        const docSnap = await getDoc(docRef);
+        let userData = {};
 
-        const userData = docSnap.exists() ? docSnap.data() : {};
+        try {
+          const docRef = doc(db, "users", firebaseUser.uid);
+          const docSnap = await getDoc(docRef);
+
+          if (docSnap.exists()) {
+            userData = docSnap.data();
+          }
+        } catch (firestoreError) {
+          console.error("Firestore read error:", firestoreError);
+        }
 
         setUser({
           uid: firebaseUser.uid,
@@ -38,8 +46,8 @@ useEffect(() => {
       }
     } catch (error) {
       console.error("Auth error:", error);
+      setUser(null);
     } finally {
-      // 🔥 이거 반드시 있어야 함
       setLoading(false);
     }
   });
