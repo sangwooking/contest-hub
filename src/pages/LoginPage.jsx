@@ -20,6 +20,33 @@ function getFirebaseErrorMessage(message) {
   return "로그인 또는 회원가입 중 문제가 발생했습니다.";
 }
 
+const inputStyle = {
+  width: "100%",
+  padding: "10px 12px",
+  borderRadius: "8px",
+  border: "1px solid #d1d5db",
+  boxSizing: "border-box",
+};
+
+const buttonStyle = {
+  width: "100%",
+  padding: "12px",
+  borderRadius: "8px",
+  border: "none",
+  backgroundColor: "#111827",
+  color: "#ffffff",
+  fontWeight: 600,
+  cursor: "pointer",
+};
+
+const linkButton = {
+  background: "none",
+  border: "none",
+  color: "#2563eb",
+  cursor: "pointer",
+  fontWeight: 600,
+};
+
 export default function LoginPage() {
   const { login, signup, clearError } = useAuth();
   const [error, setError] = useState("");
@@ -45,25 +72,11 @@ export default function LoginPage() {
     setError("");
     clearError();
 
-
-  if (!form.email.trim() || !form.password.trim()) {
-    alert("이메일과 비밀번호를 입력해주세요");
-    return;
-  }
-
-  if (mode === "signup") {
-    const result = await signup({
-      email: form.email,
-      password: form.password,
-      nickname: form.nickname,
-    });
-
-    if (!result.ok) {
-      alert(result.message);
-
+    if (!form.email.trim() || !form.password.trim()) {
+      setError("이메일과 비밀번호를 입력해주세요.");
       return;
     }
-  }
+
     if (mode === "signup" && !form.nickname.trim()) {
       setError("회원가입 시 닉네임을 입력해 주세요.");
       return;
@@ -212,30 +225,3 @@ export default function LoginPage() {
     </div>
   );
 }
-
-const inputStyle = {
-  width: "100%",
-  padding: "10px 12px",
-  borderRadius: "8px",
-  border: "1px solid #d1d5db",
-  boxSizing: "border-box",
-};
-
-const buttonStyle = {
-  width: "100%",
-  padding: "12px",
-  borderRadius: "8px",
-  border: "none",
-  backgroundColor: "#111827",
-  color: "#ffffff",
-  fontWeight: 600,
-  cursor: "pointer",
-};
-
-const linkButton = {
-  background: "none",
-  border: "none",
-  color: "#2563eb",
-  cursor: "pointer",
-  fontWeight: 600,
-};

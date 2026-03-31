@@ -17,26 +17,26 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      try {
-        console.log("firebaseUser:", firebaseUser);
-        setError("");
-  
-        if (firebaseUser) {
-          let userData = {};
-  
-          try {
-            const docRef = doc(db, "users", firebaseUser.uid);
-            const docSnap = await getDoc(docRef);
-  
-            if (docSnap.exists()) {
-              userData = docSnap.data();
-            }
-          } catch (firestoreError) {
-            console.error("Firestore read error:", firestoreError);
+  // 🔥 로그인 상태 유지
+useEffect(() => {
+  const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+    try {
+      console.log("firebaseUser:", firebaseUser);
+
+      if (firebaseUser) {
+        let userData = {};
+
+        try {
+          const docRef = doc(db, "users", firebaseUser.uid);
+          const docSnap = await getDoc(docRef);
+
+          if (docSnap.exists()) {
+            userData = docSnap.data();
           }
-  
+        } catch (firestoreError) {
+          console.error("Firestore read error:", firestoreError);
+        }
+
           setUser({
             uid: firebaseUser.uid,
             email: firebaseUser.email,
@@ -52,8 +52,8 @@ export function AuthProvider({ children }) {
       } finally {
         setLoading(false);
       }
-    });
-  
+  });
+
     return () => unsubscribe();
   }, []);
 

@@ -91,7 +91,7 @@ function buildSearchTarget(team) {
   );
 }
 
-function TeamRecruitCard({ team, onDelete, onClose, onContact, currentUser }) {
+function TeamRecruitCard({ team, onDelete, onClose, onContact, onEdit, currentUser }) {
   const recruitType = inferRecruitType(team);
   const hackathonLabel = getDisplayHackathonLabel(team);
 
@@ -261,6 +261,22 @@ function TeamRecruitCard({ team, onDelete, onClose, onContact, currentUser }) {
               모집마감
             </button>
           )}
+          {isOwner && (
+  <button
+    type="button"
+    onClick={() => onEdit?.(team)}
+    style={{
+      border: "none",
+      backgroundColor: "transparent",
+      color: "#2563eb",
+      fontWeight: 600,
+      cursor: "pointer",
+      padding: 0,
+    }}
+  >
+    수정
+  </button>
+)}
 
           {isOwner && (
             <button
@@ -288,19 +304,21 @@ export default function CampPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const { user, isLoggedIn } = useAuth();
+    const selectedSlugFromQuery =
+    searchParams.get("hackathon") || searchParams.get("slug") || "all";
+  const shouldOpenCreateForm = searchParams.get("create") === "1";
+  
+  const [showCreateForm, setShowCreateForm] = useState(shouldOpenCreateForm);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editingTeamId, setEditingTeamId] = useState(null);
 
   const [teams, setTeams] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const selectedSlugFromQuery =
-    searchParams.get("hackathon") || searchParams.get("slug") || "all";
-  const shouldOpenCreateForm = searchParams.get("create") === "1";
-
   const [selectedSlug, setSelectedSlug] = useState(selectedSlugFromQuery);
   const [showOnlyOpen, setShowOnlyOpen] = useState(false);
   const [keyword, setKeyword] = useState("");
-  const [showCreateForm, setShowCreateForm] = useState(shouldOpenCreateForm);
   const [noticeModal, setNoticeModal] = useState({
     open: false,
     mode: null, // "create" | "contact"
@@ -478,42 +496,53 @@ export default function CampPage() {
     });
   };
 
-  const createTeamPost = async () => {
-    if (!isLoggedIn || !user) {
-      alert("로그인 후 이용하세요");
-      navigate("/login");
-      return;
-    }
+  const saveTeamPost = async () => {
+  if (!isLoggedIn || !user) {
+    alert("로그인 후 이용하세요");
+    navigate("/login");
+    return;
+  }
 
-    if (!newPost.teamName.trim() || !newPost.intro.trim()) {
-      alert("팀명과 소개는 필수입니다.");
-      return;
-    }
+  if (!newPost.teamName.trim() || !newPost.intro.trim()) {
+    alert("팀명과 소개는 필수입니다.");
+    return;
+  }
 
-    const normalizedRecruitType = newPost.recruitType;
-    const normalizedHackathonSlug =
-      normalizedRecruitType === "free"
-        ? "free-recruit"
-        : newPost.hackathonSlug.trim() || "open-hackathon";
+  const normalizedRecruitType = newPost.recruitType;
+  const normalizedHackathonSlug =
+    normalizedRecruitType === "free"
+      ? "free-recruit"
+      : newPost.hackathonSlug.trim() || "open-hackathon";
 
-    try {
+  const payload = {
+    name: newPost.teamName.trim(),
+    intro: newPost.intro.trim(),
+    recruitType: normalizedRecruitType,
+    hackathonSlug: normalizedHackathonSlug,
+    isOpen: newPost.isOpen,
+    lookingFor: newPost.lookingFor
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean),
+    contact: newPost.contactUrl.trim()
+      ? {
+          type: "link",
+          url: newPost.contactUrl.trim(),
+        }
+      : null,
+  };
+
+  try {
+    if (isEditMode && editingTeamId) {
+      await updateDoc(doc(db, "teams", editingTeamId), {
+        ...payload,
+        updatedAt: serverTimestamp(),
+      });
+
+      alert("팀 모집글이 수정되었습니다.");
+    } else {
       await addDoc(collection(db, "teams"), {
-        name: newPost.teamName.trim(),
-        intro: newPost.intro.trim(),
-        recruitType: normalizedRecruitType,
-        hackathonSlug: normalizedHackathonSlug,
-        isOpen: newPost.isOpen,
-        memberCount: 1,
-        lookingFor: newPost.lookingFor
-          .split(",")
-          .map((item) => item.trim())
-          .filter(Boolean),
-        contact: newPost.contactUrl.trim()
-          ? {
-              type: "link",
-              url: newPost.contactUrl.trim(),
-            }
-          : null,
+        ...payload,
         authorId: user.uid,
         authorNickname: user.nickname || "사용자",
         leaderId: user.uid,
@@ -523,40 +552,42 @@ export default function CampPage() {
         creatorNickname: user.nickname || "사용자",
         members: [],
         applicants: [],
+        memberCount: 1,
         createdAt: serverTimestamp(),
       });
 
       alert("팀 생성 완료!");
-
-      setNewPost({
-        teamName: "",
-        recruitType: normalizedRecruitType,
-        hackathonSlug:
-          normalizedRecruitType === "hackathon" && selectedSlug !== "all"
-            ? selectedSlug
-            : "",
-        intro: "",
-        isOpen: true,
-        lookingFor: "",
-        contactUrl: "",
-      });
-
-      setShowCreateForm(false);
-      await fetchTeams();
-    } catch (error) {
-      console.error(error);
-      alert("팀 생성 실패");
     }
-  };
+
+    setNewPost({
+      teamName: "",
+      recruitType: "hackathon",
+      hackathonSlug: selectedSlug !== "all" ? selectedSlug : "",
+      intro: "",
+      isOpen: true,
+      lookingFor: "",
+      contactUrl: "",
+    });
+
+    setIsEditMode(false);
+    setEditingTeamId(null);
+    setShowCreateForm(false);
+
+    await fetchTeams();
+  } catch (error) {
+    console.error(error);
+    alert(isEditMode ? "수정 실패" : "팀 생성 실패");
+  }
+};
 
   const confirmNoticeModal = async () => {
     const { mode, targetUrl } = noticeModal;
     closeNoticeModal();
 
     if (mode === "create") {
-      await createTeamPost();
-      return;
-    }
+  await saveTeamPost();
+  return;
+}
 
     if (mode === "contact" && targetUrl) {
       window.open(targetUrl, "_blank", "noopener,noreferrer");
@@ -580,6 +611,30 @@ export default function CampPage() {
       alert("삭제에 실패했습니다.");
     }
   };
+
+const handleEditPost = (team) => {
+  setIsEditMode(true);
+  setEditingTeamId(team.id);
+
+  setNewPost({
+    teamName: team.name || "",
+    recruitType: team.recruitType || "hackathon",
+    hackathonSlug:
+      team.hackathonSlug === "free-recruit"
+        ? ""
+        : team.hackathonSlug === "open-hackathon"
+        ? ""
+        : team.hackathonSlug || "",
+    intro: team.intro || "",
+    isOpen: team.isOpen ?? true,
+    lookingFor: Array.isArray(team.lookingFor)
+      ? team.lookingFor.join(", ")
+      : "",
+    contactUrl: team.contact?.url || "",
+  });
+
+  setShowCreateForm(true);
+};
 
   const handleCloseRecruit = async (team) => {
     if (!team.id) {
@@ -632,7 +687,14 @@ export default function CampPage() {
 
           <button
             type="button"
-            onClick={() => setShowCreateForm((prev) => !prev)}
+            onClick={() => {
+  setShowCreateForm((prev) => !prev);
+
+  if (showCreateForm) {
+    setIsEditMode(false);
+    setEditingTeamId(null);
+  }
+}}
             style={{
               padding: "10px 14px",
               borderRadius: "8px",
@@ -744,7 +806,9 @@ export default function CampPage() {
             marginBottom: "20px",
           }}
         >
-          <h2 style={{ marginTop: 0, marginBottom: "16px" }}>팀 모집글 생성</h2>
+          <h2 style={{ marginTop: 0, marginBottom: "16px" }}>
+  {isEditMode ? "팀 모집글 수정" : "팀 모집글 생성"}
+</h2>
 
           {!isLoggedIn && (
             <div
@@ -943,22 +1007,22 @@ export default function CampPage() {
 
           <div style={{ marginTop: "16px" }}>
             <button
-              type="button"
-              onClick={openCreateNoticeModal}
-              disabled={!formIsValid}
-              style={{
-                padding: "10px 14px",
-                borderRadius: "8px",
-                border: "1px solid #111827",
-                backgroundColor: formIsValid ? "#111827" : "#9ca3af",
-                color: "#ffffff",
-                cursor: formIsValid ? "pointer" : "not-allowed",
-                fontSize: "14px",
-                fontWeight: 600,
-              }}
-            >
-              모집글 생성
-            </button>
+  type="button"
+  onClick={openCreateNoticeModal}
+  disabled={!formIsValid}
+  style={{
+    padding: "10px 14px",
+    borderRadius: "8px",
+    border: "1px solid #111827",
+    backgroundColor: formIsValid ? "#111827" : "#9ca3af",
+    color: "#ffffff",
+    cursor: formIsValid ? "pointer" : "not-allowed",
+    fontSize: "14px",
+    fontWeight: 600,
+  }}
+>
+  {isEditMode ? "모집글 수정" : "모집글 생성"}
+</button>
           </div>
         </section>
       )}
@@ -1036,6 +1100,7 @@ export default function CampPage() {
                   onClose={handleCloseRecruit}
                   onContact={openContactNoticeModal}
                   currentUser={user}
+                  onEdit={handleEditPost}
                 />
               ))}
             </div>
@@ -1139,8 +1204,10 @@ export default function CampPage() {
           >
             <h2 style={{ marginTop: 0, marginBottom: "14px" }}>
               {noticeModal.mode === "create"
-                ? "팀 모집글 작성 전 유의사항"
-                : "팀 문의 전 유의사항"}
+  ? isEditMode
+    ? "팀 모집글 수정 전 유의사항"
+    : "팀 모집글 작성 전 유의사항"
+  : "팀 문의 전 유의사항"}
             </h2>
 
             <p style={{ marginTop: 0, marginBottom: "12px", color: "#4b5563" }}>
