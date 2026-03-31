@@ -2,6 +2,8 @@ import { useMemo } from "react";
 import { Link } from "react-router";
 import { useAuth } from "../context/AuthContext";
 import teamsData from "../data/public_teams.json";
+import DataBoundary from "../components/common/DataBoundary";
+import StatusMessage from "../components/common/StatusMessage";
 
 function formatDateTime(dateString) {
   if (!dateString) return "-";
@@ -26,7 +28,7 @@ function getHackathonLabel(team) {
 }
 
 export default function UserPage() {
-  const { user, isLoggedIn, logout } = useAuth();
+  const { user, isLoggedIn, logout, loading, error } = useAuth();
 
   const myTeams = useMemo(() => {
     if (!isLoggedIn) return [];
@@ -54,41 +56,40 @@ export default function UserPage() {
   if (!isLoggedIn) {
     return (
       <div>
-        <div style={{ marginBottom: "20px" }}>
-          <h1 style={{ marginBottom: "8px" }}>마이페이지</h1>
-          <p style={{ margin: 0, color: "#6b7280" }}>
-            마이페이지를 보려면 먼저 로그인해 주세요.
-          </p>
-        </div>
+  <div style={{ marginBottom: "20px" }}>
+    <h1 style={{ marginBottom: "8px" }}>마이페이지</h1>
+    <p style={{ margin: 0, color: "#6b7280" }}>
+      내 정보와 활동 현황을 확인할 수 있습니다.
+    </p>
+  </div>
 
-        <section
-          style={{
-            border: "1px solid #e5e7eb",
-            borderRadius: "12px",
-            padding: "24px",
-            backgroundColor: "#ffffff",
-            maxWidth: "560px",
-          }}
-        >
-          <p style={{ margin: "0 0 16px 0", color: "#374151", lineHeight: 1.6 }}>
-            로그인하면 내 프로필, 내가 올린 팀 모집글, 활동 현황을 확인할 수 있어.
-          </p>
-
-          <Link
-            to="/login"
-            style={{
-              display: "inline-block",
-              padding: "10px 14px",
-              borderRadius: "8px",
-              backgroundColor: "#111827",
-              color: "#ffffff",
-              textDecoration: "none",
-              fontWeight: 600,
-            }}
-          >
-            로그인하러 가기
-          </Link>
-        </section>
+  <DataBoundary
+    loading={loading}
+    error={error}
+    isEmpty={!isLoggedIn}
+    loadingTitle="로그인 정보를 확인하는 중입니다"
+    loadingMessage="사용자 정보를 불러오고 있어요."
+    errorTitle="로그인 정보를 불러오지 못했습니다"
+    emptyTitle="로그인이 필요합니다"
+    emptyMessage="마이페이지를 보려면 먼저 로그인해 주세요."
+    emptyAction={
+      <Link
+        to="/login"
+        style={{
+          display: "inline-block",
+          padding: "10px 14px",
+          borderRadius: "8px",
+          backgroundColor: "#111827",
+          color: "#ffffff",
+          textDecoration: "none",
+          fontWeight: 600,
+        }}
+      >
+        로그인하러 가기
+      </Link>
+    }
+  >
+    </DataBoundary>
       </div>
     );
   }
@@ -121,13 +122,13 @@ export default function UserPage() {
           <h2 style={{ marginTop: 0, marginBottom: "16px" }}>프로필</h2>
 
           <p style={{ margin: "0 0 12px 0" }}>
-            <strong>닉네임:</strong> {user.nickname}
+            <strong>닉네임:</strong> {user?.nickname || "없음"}
           </p>
           <p style={{ margin: "0 0 12px 0" }}>
-            <strong>이메일:</strong> {user.email}
+            <strong>이메일:</strong> {user?.email || "없음"}
           </p>
           <p style={{ margin: "0 0 20px 0" }}>
-            <strong>소개:</strong> {user.bio || "자기소개가 없습니다."}
+            <strong>소개:</strong> {user?.bio || "자기소개가 없습니다."}
           </p>
 
           <button
@@ -262,9 +263,11 @@ export default function UserPage() {
           </div>
 
           {myTeams.length === 0 ? (
-            <p style={{ margin: 0, color: "#6b7280" }}>
-              아직 작성한 모집글이 없습니다.
-            </p>
+            <StatusMessage
+              type="empty"
+              title="작성한 모집글이 없어요"
+              message="아직 작성한 모집글이 없습니다."
+            />
           ) : (
             <div style={{ display: "grid", gap: "14px" }}>
               {myTeams.map((team) => (

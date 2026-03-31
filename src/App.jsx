@@ -12,12 +12,21 @@ import RankingsPage from "./pages/RankingsPage";
 import UserPage from "./pages/UserPage";
 import NotFoundPage from "./pages/NotFoundPage";
 import LoginPage from "./pages/LoginPage";
+import StatusMessage from "./components/common/StatusMessage";
 
 function AppRoutes() {
   const { loading } = useAuth();
 
   if (loading) {
-    return <div style={{ color: "red" }}>로딩중...</div>;
+    return (
+      <div style={{ maxWidth: "1200px", margin: "0 auto", padding: "24px 20px" }}>
+        <StatusMessage
+          type="loading"
+          title="앱을 준비하는 중입니다"
+          message="로그인 상태를 확인하고 있어요."
+        />
+      </div>
+    );
   }
 
   return (
