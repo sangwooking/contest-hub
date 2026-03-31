@@ -35,6 +35,7 @@ function AppRoutes() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="*" element={<NotFoundPage />} />
           <Route path="/mypage/:userId" element={<UserPage />} />
+          <Route path="/user" element={<UserPage />} />
         </Routes>
       </Layout>
     </BrowserRouter>

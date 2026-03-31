@@ -1,6 +1,17 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router";
 import { useAuth } from "../context/AuthContext";
+import {
+  addDoc,
+  collection,
+  doc,
+  getDoc,
+  onSnapshot,
+  orderBy,
+  query,
+  serverTimestamp,
+} from "firebase/firestore";
+import { db } from "../firebase";
 import teamsData from "../data/public_teams.json";
 
 function formatDateTime(value) {
@@ -11,6 +22,8 @@ function formatDateTime(value) {
       year: "numeric",
       month: "2-digit",
       day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
     });
   }
 
@@ -18,19 +31,9 @@ function formatDateTime(value) {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
   });
-}
-
-function getRecruitType(team) {
-  if (team.hackathonSlug === "free-recruit") return "자유 모집";
-  if (team.hackathonSlug === "open-hackathon") return "공모전 자유";
-  return "해커톤 모집";
-}
-
-function getHackathonLabel(team) {
-  if (team.hackathonSlug === "free-recruit") return "자유 모집";
-  if (team.hackathonSlug === "open-hackathon") return "공모전 자유";
-  return team.hackathonSlug;
 }
 
 const MENU_LIST = [
@@ -43,27 +46,102 @@ const MENU_LIST = [
 export default function UserPage() {
   const { userId } = useParams();
   const { user, isLoggedIn, logout } = useAuth();
+
   const [selectedMenu, setSelectedMenu] = useState("profile");
+  const [pageUser, setPageUser] = useState(null);
+  const [profileLoading, setProfileLoading] = useState(true);
 
-  const pageUser = useMemo(() => {
-    if (!isLoggedIn) return null;
+  const [guestbookList, setGuestbookList] = useState([]);
+  const [guestbookLoading, setGuestbookLoading] = useState(true);
+  const [guestbookInput, setGuestbookInput] = useState("");
+  const [guestbookSubmitting, setGuestbookSubmitting] = useState(false);
 
-    return {
-      id: userId || user?.uid || "me",
-      nickname: user?.nickname || "닉네임 없음",
-      email: user?.email || "-",
-      bio: user?.bio || "자기소개가 없습니다.",
-      profileImage: user?.profileImage || user?.photoURL || "",
-      guestbook: user?.guestbook || [],
-      messages: user?.messages || [],
-      participations: user?.participations || [],
-      awards: user?.awards || [],
+  const targetUserId = userId || user?.uid || null;
+
+  useEffect(() => {
+    const fetchPageUser = async () => {
+      if (!targetUserId) {
+        setPageUser(null);
+        setProfileLoading(false);
+        return;
+      }
+
+      try {
+        setProfileLoading(true);
+
+        const userRef = doc(db, "users", targetUserId);
+        const userSnap = await getDoc(userRef);
+
+        if (userSnap.exists()) {
+          const data = userSnap.data();
+
+          setPageUser({
+            id: userSnap.id,
+            nickname: data.nickname || "닉네임 없음",
+            email: data.email || "-",
+            bio: data.bio || "자기소개가 없습니다.",
+            profileImage: data.profileImage || data.photoURL || "",
+            messages: data.messages || [],
+            participations: data.participations || [],
+            awards: data.awards || [],
+          });
+        } else {
+          setPageUser({
+            id: targetUserId,
+            nickname: user?.nickname || "닉네임 없음",
+            email: user?.email || "-",
+            bio: user?.bio || "자기소개가 없습니다.",
+            profileImage: user?.profileImage || user?.photoURL || "",
+            messages: [],
+            participations: [],
+            awards: [],
+          });
+        }
+      } catch (error) {
+        console.error("사용자 정보 조회 실패:", error);
+        setPageUser(null);
+      } finally {
+        setProfileLoading(false);
+      }
     };
-  }, [isLoggedIn, user, userId]);
+
+    fetchPageUser();
+  }, [targetUserId, user]);
+
+  useEffect(() => {
+    if (!targetUserId) {
+      setGuestbookList([]);
+      setGuestbookLoading(false);
+      return;
+    }
+
+    setGuestbookLoading(true);
+
+    const guestbookRef = collection(db, "users", targetUserId, "guestbook");
+    const guestbookQuery = query(guestbookRef, orderBy("createdAt", "desc"));
+
+    const unsubscribe = onSnapshot(
+      guestbookQuery,
+      (snapshot) => {
+        const nextList = snapshot.docs.map((docItem) => ({
+          id: docItem.id,
+          ...docItem.data(),
+        }));
+        setGuestbookList(nextList);
+        setGuestbookLoading(false);
+      },
+      (error) => {
+        console.error("방명록 실시간 조회 실패:", error);
+        setGuestbookList([]);
+        setGuestbookLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [targetUserId]);
 
   const myTeams = useMemo(() => {
     if (!isLoggedIn) return [];
-
     return teamsData.slice(0, 3);
   }, [isLoggedIn]);
 
@@ -81,27 +159,6 @@ export default function UserPage() {
       free: freeCount,
     };
   }, [myTeams]);
-
-  const guestbookList = useMemo(() => {
-    if (!pageUser) return [];
-
-    if (pageUser.guestbook.length > 0) return pageUser.guestbook;
-
-    return [
-      {
-        id: 1,
-        writer: "홍길동",
-        content: "프로필 잘 보고 갑니다!",
-        createdAt: "2026-03-31",
-      },
-      {
-        id: 2,
-        writer: "김개발",
-        content: "다음 공모전도 응원할게요.",
-        createdAt: "2026-03-29",
-      },
-    ];
-  }, [pageUser]);
 
   const messageList = useMemo(() => {
     if (!pageUser) return [];
@@ -161,6 +218,40 @@ export default function UserPage() {
     };
   }, [pageUser]);
 
+  const handleGuestbookSubmit = async (e) => {
+    e.preventDefault();
+
+    if (!isLoggedIn || !user || !targetUserId) {
+      alert("로그인 후 작성할 수 있습니다.");
+      return;
+    }
+
+    if (!guestbookInput.trim()) {
+      alert("댓글 내용을 입력해주세요.");
+      return;
+    }
+
+    try {
+      setGuestbookSubmitting(true);
+
+      await addDoc(collection(db, "users", targetUserId, "guestbook"), {
+        writerId: user.uid,
+        writerNickname: user.nickname || user.displayName || "사용자",
+        writerEmail: user.email || "",
+        writerProfileImage: user.profileImage || user.photoURL || "",
+        content: guestbookInput.trim(),
+        createdAt: serverTimestamp(),
+      });
+
+      setGuestbookInput("");
+    } catch (error) {
+      console.error("방명록 작성 실패:", error);
+      alert("방명록 등록에 실패했습니다.");
+    } finally {
+      setGuestbookSubmitting(false);
+    }
+  };
+
   if (!isLoggedIn) {
     return (
       <div>
@@ -203,6 +294,15 @@ export default function UserPage() {
     );
   }
 
+  if (profileLoading) {
+    return (
+      <div>
+        <h1 style={{ marginBottom: "12px" }}>마이페이지</h1>
+        <p style={{ color: "#6b7280" }}>사용자 정보를 불러오는 중입니다...</p>
+      </div>
+    );
+  }
+
   const renderTabContent = () => {
     if (selectedMenu === "profile") {
       return (
@@ -241,7 +341,7 @@ export default function UserPage() {
                   fontSize: "12px",
                 }}
               >
-                {pageUser.profileImage ? (
+                {pageUser?.profileImage ? (
                   <img
                     src={pageUser.profileImage}
                     alt="profile"
@@ -258,18 +358,18 @@ export default function UserPage() {
 
               <div>
                 <p style={{ margin: "0 0 10px 0" }}>
-                  <strong>닉네임:</strong> {pageUser.nickname}
+                  <strong>닉네임:</strong> {pageUser?.nickname || "닉네임 없음"}
                 </p>
                 <p style={{ margin: "0 0 10px 0" }}>
-                  <strong>이메일:</strong> {pageUser.email}
+                  <strong>이메일:</strong> {pageUser?.email || "-"}
                 </p>
                 <p style={{ margin: 0 }}>
-                  <strong>소개:</strong> {pageUser.bio}
+                  <strong>소개:</strong> {pageUser?.bio || "자기소개가 없습니다."}
                 </p>
               </div>
             </div>
 
-            {!userId || pageUser.id === user?.uid ? (
+            {!userId || pageUser?.id === user?.uid ? (
               <button
                 type="button"
                 onClick={logout}
@@ -305,60 +405,21 @@ export default function UserPage() {
                 gap: "12px",
               }}
             >
-              <div
-                style={{
-                  borderRadius: "10px",
-                  padding: "14px",
-                  backgroundColor: "#f8fafc",
-                  border: "1px solid #e5e7eb",
-                }}
-              >
+              <div style={{ borderRadius: "10px", padding: "14px", backgroundColor: "#f8fafc", border: "1px solid #e5e7eb" }}>
                 <p style={{ margin: "0 0 8px 0", color: "#6b7280" }}>작성 모집글</p>
-                <p style={{ margin: 0, fontSize: "24px", fontWeight: 700 }}>
-                  {activitySummary.total}
-                </p>
+                <p style={{ margin: 0, fontSize: "24px", fontWeight: 700 }}>{activitySummary.total}</p>
               </div>
-
-              <div
-                style={{
-                  borderRadius: "10px",
-                  padding: "14px",
-                  backgroundColor: "#f8fafc",
-                  border: "1px solid #e5e7eb",
-                }}
-              >
+              <div style={{ borderRadius: "10px", padding: "14px", backgroundColor: "#f8fafc", border: "1px solid #e5e7eb" }}>
                 <p style={{ margin: "0 0 8px 0", color: "#6b7280" }}>모집중</p>
-                <p style={{ margin: 0, fontSize: "24px", fontWeight: 700 }}>
-                  {activitySummary.open}
-                </p>
+                <p style={{ margin: 0, fontSize: "24px", fontWeight: 700 }}>{activitySummary.open}</p>
               </div>
-
-              <div
-                style={{
-                  borderRadius: "10px",
-                  padding: "14px",
-                  backgroundColor: "#f8fafc",
-                  border: "1px solid #e5e7eb",
-                }}
-              >
+              <div style={{ borderRadius: "10px", padding: "14px", backgroundColor: "#f8fafc", border: "1px solid #e5e7eb" }}>
                 <p style={{ margin: "0 0 8px 0", color: "#6b7280" }}>모집마감</p>
-                <p style={{ margin: 0, fontSize: "24px", fontWeight: 700 }}>
-                  {activitySummary.closed}
-                </p>
+                <p style={{ margin: 0, fontSize: "24px", fontWeight: 700 }}>{activitySummary.closed}</p>
               </div>
-
-              <div
-                style={{
-                  borderRadius: "10px",
-                  padding: "14px",
-                  backgroundColor: "#f8fafc",
-                  border: "1px solid #e5e7eb",
-                }}
-              >
+              <div style={{ borderRadius: "10px", padding: "14px", backgroundColor: "#f8fafc", border: "1px solid #e5e7eb" }}>
                 <p style={{ margin: "0 0 8px 0", color: "#6b7280" }}>자유 모집글</p>
-                <p style={{ margin: 0, fontSize: "24px", fontWeight: 700 }}>
-                  {activitySummary.free}
-                </p>
+                <p style={{ margin: 0, fontSize: "24px", fontWeight: 700 }}>{activitySummary.free}</p>
               </div>
             </div>
           </div>
@@ -378,11 +439,67 @@ export default function UserPage() {
         >
           <h2 style={{ marginTop: 0, marginBottom: "16px" }}>방명록</h2>
 
-          <div style={{ display: "grid", gap: "14px" }}>
-            {guestbookList.length === 0 ? (
-              <p style={{ margin: 0, color: "#6b7280" }}>방명록이 없습니다.</p>
-            ) : (
-              guestbookList.map((item) => (
+          <form onSubmit={handleGuestbookSubmit} style={{ marginBottom: "20px" }}>
+            <textarea
+              value={guestbookInput}
+              onChange={(e) => setGuestbookInput(e.target.value)}
+              placeholder={
+                pageUser?.id === user?.uid
+                  ? "내 방명록에 남길 글을 입력하세요."
+                  : `${pageUser?.nickname || "사용자"}님의 방명록에 글을 남겨보세요.`
+              }
+              style={{
+                width: "100%",
+                minHeight: "110px",
+                padding: "14px",
+                borderRadius: "12px",
+                border: "1px solid #d1d5db",
+                boxSizing: "border-box",
+                resize: "vertical",
+                marginBottom: "12px",
+                fontFamily: "inherit",
+              }}
+            />
+
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: "12px",
+                flexWrap: "wrap",
+              }}
+            >
+              <p style={{ margin: 0, color: "#6b7280", fontSize: "14px" }}>
+                로그인한 사용자는 누구나 방명록을 남길 수 있습니다.
+              </p>
+
+              <button
+                type="submit"
+                disabled={guestbookSubmitting}
+                style={{
+                  padding: "10px 16px",
+                  borderRadius: "8px",
+                  border: "none",
+                  backgroundColor: "#111827",
+                  color: "#ffffff",
+                  cursor: guestbookSubmitting ? "default" : "pointer",
+                  fontWeight: 600,
+                  opacity: guestbookSubmitting ? 0.7 : 1,
+                }}
+              >
+                {guestbookSubmitting ? "등록 중..." : "댓글 등록"}
+              </button>
+            </div>
+          </form>
+
+          {guestbookLoading ? (
+            <p style={{ margin: 0, color: "#6b7280" }}>방명록을 불러오는 중입니다...</p>
+          ) : guestbookList.length === 0 ? (
+            <p style={{ margin: 0, color: "#6b7280" }}>아직 작성된 방명록이 없습니다.</p>
+          ) : (
+            <div style={{ display: "grid", gap: "14px" }}>
+              {guestbookList.map((item) => (
                 <article
                   key={item.id}
                   style={{
@@ -401,34 +518,27 @@ export default function UserPage() {
                       marginBottom: "8px",
                     }}
                   >
-                    <strong>{item.writer}</strong>
+                    <strong>{item.writerNickname || "사용자"}</strong>
                     <span style={{ color: "#6b7280", fontSize: "14px" }}>
                       {formatDateTime(item.createdAt)}
                     </span>
                   </div>
+
                   <p style={{ margin: 0, color: "#374151", lineHeight: 1.6 }}>
                     {item.content}
                   </p>
                 </article>
-              ))
-            )}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       );
     }
 
     if (selectedMenu === "messages") {
       return (
-        <div
-          style={{
-            border: "1px solid #e5e7eb",
-            borderRadius: "12px",
-            padding: "20px",
-            backgroundColor: "#ffffff",
-          }}
-        >
+        <div style={{ border: "1px solid #e5e7eb", borderRadius: "12px", padding: "20px", backgroundColor: "#ffffff" }}>
           <h2 style={{ marginTop: 0, marginBottom: "16px" }}>쪽지함</h2>
-
           <div style={{ display: "grid", gap: "14px" }}>
             {messageList.length === 0 ? (
               <p style={{ margin: 0, color: "#6b7280" }}>받은 쪽지가 없습니다.</p>
@@ -471,16 +581,8 @@ export default function UserPage() {
     if (selectedMenu === "history") {
       return (
         <div style={{ display: "grid", gap: "20px" }}>
-          <div
-            style={{
-              border: "1px solid #e5e7eb",
-              borderRadius: "12px",
-              padding: "20px",
-              backgroundColor: "#ffffff",
-            }}
-          >
+          <div style={{ border: "1px solid #e5e7eb", borderRadius: "12px", padding: "20px", backgroundColor: "#ffffff" }}>
             <h2 style={{ marginTop: 0, marginBottom: "16px" }}>참여 내역</h2>
-
             {historyData.participations.length === 0 ? (
               <p style={{ margin: 0, color: "#6b7280" }}>참여 내역이 없습니다.</p>
             ) : (
@@ -495,9 +597,7 @@ export default function UserPage() {
                       backgroundColor: "#ffffff",
                     }}
                   >
-                    <h3 style={{ margin: "0 0 8px 0", fontSize: "17px" }}>
-                      {item.title}
-                    </h3>
+                    <h3 style={{ margin: "0 0 8px 0", fontSize: "17px" }}>{item.title}</h3>
                     <p style={{ margin: "0 0 6px 0", color: "#374151" }}>
                       <strong>역할:</strong> {item.role}
                     </p>
@@ -508,16 +608,8 @@ export default function UserPage() {
             )}
           </div>
 
-          <div
-            style={{
-              border: "1px solid #e5e7eb",
-              borderRadius: "12px",
-              padding: "20px",
-              backgroundColor: "#ffffff",
-            }}
-          >
+          <div style={{ border: "1px solid #e5e7eb", borderRadius: "12px", padding: "20px", backgroundColor: "#ffffff" }}>
             <h2 style={{ marginTop: 0, marginBottom: "16px" }}>수상 내역</h2>
-
             {historyData.awards.length === 0 ? (
               <p style={{ margin: 0, color: "#6b7280" }}>수상 내역이 없습니다.</p>
             ) : (
@@ -532,9 +624,7 @@ export default function UserPage() {
                       backgroundColor: "#ffffff",
                     }}
                   >
-                    <h3 style={{ margin: "0 0 8px 0", fontSize: "17px" }}>
-                      {item.title}
-                    </h3>
+                    <h3 style={{ margin: "0 0 8px 0", fontSize: "17px" }}>{item.title}</h3>
                     <p style={{ margin: "0 0 6px 0", color: "#374151" }}>
                       <strong>수상:</strong> {item.awardName}
                     </p>
