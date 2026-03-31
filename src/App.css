@@ -182,3 +182,27 @@
     border-right-color: var(--border);
   }
 }
+.status-message-card {
+  width: 100%;
+  padding: 24px;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  background: #ffffff;
+  text-align: center;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.status-message-card h3 {
+  margin: 0 0 8px;
+  font-size: 20px;
+}
+
+.status-message-card p {
+  margin: 0;
+  color: #666;
+  line-height: 1.5;
+}
+
+.status-message-action {
+  margin-top: 16px;
+}

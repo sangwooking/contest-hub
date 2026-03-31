@@ -1,6 +1,7 @@
 import { useState } from "react";
 import hackathons from "../data/public_hackathons.json";
 import HackathonCard from "../components/hackathons/HackathonCard";
+import DataBoundary from "../components/common/DataBoundary";
 
 export default function HackathonsPage() {
   const [selectedTag, setSelectedTag] = useState("전체");
@@ -20,7 +21,7 @@ export default function HackathonsPage() {
 
     return matchTag && matchStatus;
   });
-
+  
   return (
     <div>
       <h1 style={{ marginBottom: "20px" }}>공모전 목록</h1>
@@ -49,13 +50,19 @@ export default function HackathonsPage() {
         </select>
       </div>
 
-      {filteredHackathons.length === 0 ? (
-        <p>조건에 맞는 공모전이 없습니다.</p>
-      ) : (
-        filteredHackathons.map((hackathon) => (
-          <HackathonCard key={hackathon.slug} hackathon={hackathon} />
-        ))
-      )}
+      <DataBoundary
+        loading={false}
+        error=""
+        isEmpty={filteredHackathons.length === 0}
+        emptyTitle="조건에 맞는 공모전이 없어요"
+        emptyMessage="필터를 바꾸거나 다른 태그를 선택해 보세요."
+      >
+        <div style={{ display: "grid", gap: "16px" }}>
+          {filteredHackathons.map((hackathon) => (
+            <HackathonCard key={hackathon.slug} hackathon={hackathon} />
+          ))}
+        </div>
+      </DataBoundary>
     </div>
   );
 }

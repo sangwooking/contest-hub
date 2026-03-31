@@ -13,6 +13,8 @@ import {
 } from "firebase/firestore";
 import { db } from "../firebase";
 import teamsData from "../data/public_teams.json";
+import DataBoundary from "../components/common/DataBoundary";
+import StatusMessage from "../components/common/StatusMessage";
 
 function formatDateTime(value) {
   if (!value) return "-";
@@ -45,7 +47,7 @@ const MENU_LIST = [
 
 export default function UserPage() {
   const { userId } = useParams();
-  const { user, isLoggedIn, logout } = useAuth();
+  const { user, isLoggedIn, logout, loading, error } = useAuth();
 
   const [selectedMenu, setSelectedMenu] = useState("profile");
   const [pageUser, setPageUser] = useState(null);
@@ -255,13 +257,14 @@ export default function UserPage() {
   if (!isLoggedIn) {
     return (
       <div>
-        <div style={{ marginBottom: "20px" }}>
-          <h1 style={{ marginBottom: "8px" }}>마이페이지</h1>
-          <p style={{ margin: 0, color: "#6b7280" }}>
-            마이페이지를 보려면 먼저 로그인해 주세요.
-          </p>
-        </div>
+  <div style={{ marginBottom: "20px" }}>
+    <h1 style={{ marginBottom: "8px" }}>마이페이지</h1>
+    <p style={{ margin: 0, color: "#6b7280" }}>
+      내 정보와 활동 현황을 확인할 수 있습니다.
+    </p>
+  </div>
 
+<<<<<<< HEAD
         <section
           style={{
             border: "1px solid #e5e7eb",
@@ -290,6 +293,35 @@ export default function UserPage() {
             로그인하러 가기
           </Link>
         </section>
+=======
+  <DataBoundary
+    loading={loading}
+    error={error}
+    isEmpty={!isLoggedIn}
+    loadingTitle="로그인 정보를 확인하는 중입니다"
+    loadingMessage="사용자 정보를 불러오고 있어요."
+    errorTitle="로그인 정보를 불러오지 못했습니다"
+    emptyTitle="로그인이 필요합니다"
+    emptyMessage="마이페이지를 보려면 먼저 로그인해 주세요."
+    emptyAction={
+      <Link
+        to="/login"
+        style={{
+          display: "inline-block",
+          padding: "10px 14px",
+          borderRadius: "8px",
+          backgroundColor: "#111827",
+          color: "#ffffff",
+          textDecoration: "none",
+          fontWeight: 600,
+        }}
+      >
+        로그인하러 가기
+      </Link>
+    }
+  >
+    </DataBoundary>
+>>>>>>> feature/C
       </div>
     );
   }
@@ -303,11 +335,45 @@ export default function UserPage() {
     );
   }
 
+<<<<<<< HEAD
   const renderTabContent = () => {
     if (selectedMenu === "profile") {
       return (
         <div style={{ display: "grid", gap: "20px" }}>
           <div
+=======
+      <section
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+          gap: "20px",
+          marginBottom: "20px",
+        }}
+      >
+        <div
+          style={{
+            border: "1px solid #e5e7eb",
+            borderRadius: "12px",
+            padding: "20px",
+            backgroundColor: "#ffffff",
+          }}
+        >
+          <h2 style={{ marginTop: 0, marginBottom: "16px" }}>프로필</h2>
+
+          <p style={{ margin: "0 0 12px 0" }}>
+            <strong>닉네임:</strong> {user?.nickname || "없음"}
+          </p>
+          <p style={{ margin: "0 0 12px 0" }}>
+            <strong>이메일:</strong> {user?.email || "없음"}
+          </p>
+          <p style={{ margin: "0 0 20px 0" }}>
+            <strong>소개:</strong> {user?.bio || "자기소개가 없습니다."}
+          </p>
+
+          <button
+            type="button"
+            onClick={logout}
+>>>>>>> feature/C
             style={{
               border: "1px solid #e5e7eb",
               borderRadius: "12px",
@@ -474,6 +540,7 @@ export default function UserPage() {
                 로그인한 사용자는 누구나 방명록을 남길 수 있습니다.
               </p>
 
+<<<<<<< HEAD
               <button
                 type="submit"
                 disabled={guestbookSubmitting}
@@ -497,6 +564,14 @@ export default function UserPage() {
             <p style={{ margin: 0, color: "#6b7280" }}>방명록을 불러오는 중입니다...</p>
           ) : guestbookList.length === 0 ? (
             <p style={{ margin: 0, color: "#6b7280" }}>아직 작성된 방명록이 없습니다.</p>
+=======
+          {myTeams.length === 0 ? (
+            <StatusMessage
+              type="empty"
+              title="작성한 모집글이 없어요"
+              message="아직 작성한 모집글이 없습니다."
+            />
+>>>>>>> feature/C
           ) : (
             <div style={{ display: "grid", gap: "14px" }}>
               {guestbookList.map((item) => (
