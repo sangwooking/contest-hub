@@ -1,12 +1,21 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
 import { useAuth } from "../context/AuthContext";
-import teamsData from "../data/public_teams.json";
+import { collection, getDocs, query, where } from "firebase/firestore";
+import { db } from "../firebase";
 
-function formatDateTime(dateString) {
-  if (!dateString) return "-";
+function formatDateTime(value) {
+  if (!value) return "-";
 
-  return new Date(dateString).toLocaleString("ko-KR", {
+  if (typeof value === "object" && value?.toDate) {
+    return value.toDate().toLocaleString("ko-KR", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    });
+  }
+
+  return new Date(value).toLocaleString("ko-KR", {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
@@ -27,14 +36,56 @@ function getHackathonLabel(team) {
 
 export default function UserPage() {
   const { user, isLoggedIn, logout } = useAuth();
+  const [myTeams, setMyTeams] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [teamsError, setTeamsError] = useState("");
 
-  const myTeams = useMemo(() => {
-    if (!isLoggedIn) return [];
+  useEffect(() => {
+    const fetchMyTeams = async () => {
+      if (!isLoggedIn || !user?.uid) {
+        setMyTeams([]);
+        return;
+      }
 
-    // 최소 구현용:
-    // 실제 작성자 데이터가 아직 없으니 앞에서부터 일부를 내 글처럼 보여줌
-    return teamsData.slice(0, 3);
-  }, [isLoggedIn]);
+      try {
+        setLoading(true);
+        setTeamsError("");
+
+        const teamsRef = collection(db, "teams");
+        const teamsQuery = query(teamsRef, where("creatorId", "==", user.uid));
+        const snapshot = await getDocs(teamsQuery);
+
+        const teamList = snapshot.docs.map((doc) => ({
+          id: doc.id,
+          teamCode: doc.id,
+          ...doc.data(),
+        }));
+
+        teamList.sort((a, b) => {
+          const aTime =
+            typeof a.createdAt === "object" && a.createdAt?.toMillis
+              ? a.createdAt.toMillis()
+              : new Date(a.createdAt || 0).getTime();
+
+          const bTime =
+            typeof b.createdAt === "object" && b.createdAt?.toMillis
+              ? b.createdAt.toMillis()
+              : new Date(b.createdAt || 0).getTime();
+
+          return bTime - aTime;
+        });
+
+        setMyTeams(teamList);
+      } catch (error) {
+        console.error("내 팀 모집글 조회 실패:", error);
+        setTeamsError("내가 작성한 팀 모집글을 불러오지 못했습니다.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchMyTeams();
+  }, [isLoggedIn, user?.uid]);
 
   const activitySummary = useMemo(() => {
     const openCount = myTeams.filter((team) => team.isOpen).length;
@@ -121,10 +172,10 @@ export default function UserPage() {
           <h2 style={{ marginTop: 0, marginBottom: "16px" }}>프로필</h2>
 
           <p style={{ margin: "0 0 12px 0" }}>
-            <strong>닉네임:</strong> {user.nickname}
+            <strong>닉네임:</strong> {user.nickname || "사용자"}
           </p>
           <p style={{ margin: "0 0 12px 0" }}>
-            <strong>이메일:</strong> {user.email}
+            <strong>이메일:</strong> {user.email || "-"}
           </p>
           <p style={{ margin: "0 0 20px 0" }}>
             <strong>소개:</strong> {user.bio || "자기소개가 없습니다."}
@@ -261,7 +312,13 @@ export default function UserPage() {
             </Link>
           </div>
 
-          {myTeams.length === 0 ? (
+          {loading ? (
+            <p style={{ margin: 0, color: "#6b7280" }}>
+              내 팀 모집글을 불러오는 중입니다...
+            </p>
+          ) : teamsError ? (
+            <p style={{ margin: 0, color: "#dc2626" }}>{teamsError}</p>
+          ) : myTeams.length === 0 ? (
             <p style={{ margin: 0, color: "#6b7280" }}>
               아직 작성한 모집글이 없습니다.
             </p>
@@ -269,7 +326,7 @@ export default function UserPage() {
             <div style={{ display: "grid", gap: "14px" }}>
               {myTeams.map((team) => (
                 <article
-                  key={team.teamCode}
+                  key={team.id || team.teamCode}
                   style={{
                     border: "1px solid #e5e7eb",
                     borderRadius: "12px",

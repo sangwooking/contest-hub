@@ -1,14 +1,33 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router";
+import { Link, useNavigate, useSearchParams } from "react-router";
 import teamsData from "../data/public_teams.json";
 import { useAuth } from "../context/AuthContext";
+import {
+  collection,
+  addDoc,
+  getDocs,
+  serverTimestamp,
+  deleteDoc,
+  doc,
+  updateDoc,
+} from "firebase/firestore";
+import { db } from "../firebase";
 
-const CAMP_STORAGE_KEY = "contest-hub-camp-posts";
+function formatDateTime(value) {
+  if (!value) return "-";
 
-function formatDateTime(dateString) {
-  if (!dateString) return "-";
+  // Firestore Timestamp 대응
+  if (typeof value === "object" && value?.toDate) {
+    return value.toDate().toLocaleString("ko-KR", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
 
-  return new Date(dateString).toLocaleString("ko-KR", {
+  return new Date(value).toLocaleString("ko-KR", {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
@@ -65,27 +84,22 @@ function buildSearchTarget(team) {
         : "해커톤모집 해커톤 모집 공모전모집 공모전 모집",
       ...(team.lookingFor || []),
       team.contact?.url,
+      team.authorNickname,
+      team.leaderNickname,
+      team.creatorNickname,
     ].join(" ")
   );
 }
 
-function getStoredCampPosts() {
-  const savedValue = localStorage.getItem(CAMP_STORAGE_KEY);
-
-  if (!savedValue) return [];
-
-  try {
-    const parsed = JSON.parse(savedValue);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch (error) {
-    localStorage.removeItem(CAMP_STORAGE_KEY);
-    return [];
-  }
-}
-
-function TeamRecruitCard({ team, onDelete, onClose, onContact }) {
+function TeamRecruitCard({ team, onDelete, onClose, onContact, currentUser }) {
   const recruitType = inferRecruitType(team);
   const hackathonLabel = getDisplayHackathonLabel(team);
+
+  const isOwner =
+    currentUser &&
+    (team.authorId === currentUser.uid ||
+      team.leaderId === currentUser.uid ||
+      team.creatorId === currentUser.uid);
 
   return (
     <article
@@ -172,9 +186,12 @@ function TeamRecruitCard({ team, onDelete, onClose, onContact }) {
             ? team.lookingFor.join(", ")
             : "없음"}
         </p>
-        {team.authorNickname && (
+        {(team.authorNickname || team.leaderNickname || team.creatorNickname) && (
           <p style={{ margin: 0 }}>
-            <strong>작성자:</strong> {team.authorNickname}
+            <strong>작성자:</strong>{" "}
+            {team.authorNickname ||
+              team.leaderNickname ||
+              team.creatorNickname}
           </p>
         )}
       </div>
@@ -213,24 +230,25 @@ function TeamRecruitCard({ team, onDelete, onClose, onContact }) {
 
           {team.contact?.url && (
             <button
-            type="button"
-            onClick={() => onContact?.(team.contact.url)}
-            style={{
-              border: "none",
-              backgroundColor: "transparent",
-              color: "#111827",
-              fontWeight: 600,
-              cursor: "pointer",
-              padding: 0,
-            }}
-          >
-            연락하기
-          </button>
-        )}
-          {team.isCustom && team.isOpen && (
+              type="button"
+              onClick={() => onContact?.(team.contact.url)}
+              style={{
+                border: "none",
+                backgroundColor: "transparent",
+                color: "#111827",
+                fontWeight: 600,
+                cursor: "pointer",
+                padding: 0,
+              }}
+            >
+              연락하기
+            </button>
+          )}
+
+          {isOwner && team.isOpen && (
             <button
               type="button"
-              onClick={() => onClose?.(team.teamCode)}
+              onClick={() => onClose?.(team)}
               style={{
                 border: "none",
                 backgroundColor: "transparent",
@@ -244,10 +262,10 @@ function TeamRecruitCard({ team, onDelete, onClose, onContact }) {
             </button>
           )}
 
-          {team.isCustom && (
+          {isOwner && (
             <button
               type="button"
-              onClick={() => onDelete?.(team.teamCode)}
+              onClick={() => onDelete?.(team)}
               style={{
                 border: "none",
                 backgroundColor: "transparent",
@@ -268,7 +286,12 @@ function TeamRecruitCard({ team, onDelete, onClose, onContact }) {
 
 export default function CampPage() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const { user, isLoggedIn } = useAuth();
+
+  const [teams, setTeams] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   const selectedSlugFromQuery =
     searchParams.get("hackathon") || searchParams.get("slug") || "all";
@@ -278,7 +301,6 @@ export default function CampPage() {
   const [showOnlyOpen, setShowOnlyOpen] = useState(false);
   const [keyword, setKeyword] = useState("");
   const [showCreateForm, setShowCreateForm] = useState(shouldOpenCreateForm);
-  const [customTeams, setCustomTeams] = useState(() => getStoredCampPosts());
   const [noticeModal, setNoticeModal] = useState({
     open: false,
     mode: null, // "create" | "contact"
@@ -295,13 +317,50 @@ export default function CampPage() {
     contactUrl: "",
   });
 
+  const fetchTeams = async () => {
+    try {
+      setLoading(true);
+      setError("");
+
+      const snapshot = await getDocs(collection(db, "teams"));
+
+      const teamList = snapshot.docs.map((teamDoc) => ({
+        id: teamDoc.id,
+        teamCode: teamDoc.id,
+        isCustom: true,
+        ...teamDoc.data(),
+      }));
+
+      teamList.sort((a, b) => {
+        const aTime =
+          typeof a.createdAt === "object" && a.createdAt?.toMillis
+            ? a.createdAt.toMillis()
+            : new Date(a.createdAt || 0).getTime();
+
+        const bTime =
+          typeof b.createdAt === "object" && b.createdAt?.toMillis
+            ? b.createdAt.toMillis()
+            : new Date(b.createdAt || 0).getTime();
+
+        return bTime - aTime;
+      });
+
+      setTeams(teamList);
+    } catch (err) {
+      console.error(err);
+      setError("팀 목록을 불러오지 못했습니다.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    localStorage.setItem(CAMP_STORAGE_KEY, JSON.stringify(customTeams));
-  }, [customTeams]);
+    fetchTeams();
+  }, []);
 
   const allTeamsSource = useMemo(() => {
-    return [...customTeams, ...teamsData];
-  }, [customTeams]);
+    return [...teams, ...teamsData];
+  }, [teams]);
 
   const hackathonOptions = useMemo(
     () => getHackathonOptions(allTeamsSource),
@@ -375,7 +434,10 @@ export default function CampPage() {
         return {
           ...prev,
           recruitType: nextValue,
-          hackathonSlug: nextValue === "free" ? "" : prev.hackathonSlug,
+          hackathonSlug:
+            nextValue === "free"
+              ? ""
+              : prev.hackathonSlug || (selectedSlug !== "all" ? selectedSlug : ""),
         };
       }
 
@@ -387,13 +449,19 @@ export default function CampPage() {
   };
 
   const openCreateNoticeModal = () => {
+    if (!isLoggedIn) {
+      alert("로그인한 사용자만 팀 모집글을 작성할 수 있습니다.");
+      navigate("/login");
+      return;
+    }
+
     setNoticeModal({
       open: true,
       mode: "create",
       targetUrl: "",
     });
   };
-  
+
   const openContactNoticeModal = (url) => {
     setNoticeModal({
       open: true,
@@ -401,7 +469,7 @@ export default function CampPage() {
       targetUrl: url || "",
     });
   };
-  
+
   const closeNoticeModal = () => {
     setNoticeModal({
       open: false,
@@ -409,20 +477,14 @@ export default function CampPage() {
       targetUrl: "",
     });
   };
-  
-  const confirmNoticeModal = () => {
-    if (noticeModal.mode === "create") {
-      handleCreatePost();
-    }
-  
-    if (noticeModal.mode === "contact" && noticeModal.targetUrl) {
-      window.open(noticeModal.targetUrl, "_blank", "noopener,noreferrer");
-    }
-  
-    closeNoticeModal();
-  };
 
-  const handleCreatePost = () => {
+  const createTeamPost = async () => {
+    if (!isLoggedIn || !user) {
+      alert("로그인 후 이용하세요");
+      navigate("/login");
+      return;
+    }
+
     if (!newPost.teamName.trim() || !newPost.intro.trim()) {
       alert("팀명과 소개는 필수입니다.");
       return;
@@ -434,62 +496,106 @@ export default function CampPage() {
         ? "free-recruit"
         : newPost.hackathonSlug.trim() || "open-hackathon";
 
-    const createdTeam = {
-      teamCode: `custom-team-${Date.now()}`,
-      hackathonSlug: normalizedHackathonSlug,
-      recruitType: normalizedRecruitType,
-      name: newPost.teamName.trim(),
-      isOpen: newPost.isOpen,
-      memberCount: 1,
-      lookingFor: newPost.lookingFor
-        .split(",")
-        .map((item) => item.trim())
-        .filter(Boolean),
-      intro: newPost.intro.trim(),
-      contact: newPost.contactUrl.trim()
-        ? {
-            type: "link",
-            url: newPost.contactUrl.trim(),
-          }
-        : null,
-      createdAt: new Date().toISOString(),
-      authorId: user?.id || "guest-user",
-      authorNickname: user?.nickname || "게스트",
-      leaderId: user?.id || "guest-user",
-      isCustom: true,
-    };
+    try {
+      await addDoc(collection(db, "teams"), {
+        name: newPost.teamName.trim(),
+        intro: newPost.intro.trim(),
+        recruitType: normalizedRecruitType,
+        hackathonSlug: normalizedHackathonSlug,
+        isOpen: newPost.isOpen,
+        memberCount: 1,
+        lookingFor: newPost.lookingFor
+          .split(",")
+          .map((item) => item.trim())
+          .filter(Boolean),
+        contact: newPost.contactUrl.trim()
+          ? {
+              type: "link",
+              url: newPost.contactUrl.trim(),
+            }
+          : null,
+        authorId: user.uid,
+        authorNickname: user.nickname || "사용자",
+        leaderId: user.uid,
+        leaderNickname: user.nickname || "사용자",
+        creatorId: user.uid,
+        creatorEmail: user.email || "",
+        creatorNickname: user.nickname || "사용자",
+        members: [],
+        applicants: [],
+        createdAt: serverTimestamp(),
+      });
 
-    setCustomTeams((prev) => [createdTeam, ...prev]);
+      alert("팀 생성 완료!");
 
-    setNewPost({
-      teamName: "",
-      recruitType: normalizedRecruitType,
-      hackathonSlug:
-        normalizedRecruitType === "hackathon" && selectedSlug !== "all"
-          ? selectedSlug
-          : "",
-      intro: "",
-      isOpen: true,
-      lookingFor: "",
-      contactUrl: "",
-    });
+      setNewPost({
+        teamName: "",
+        recruitType: normalizedRecruitType,
+        hackathonSlug:
+          normalizedRecruitType === "hackathon" && selectedSlug !== "all"
+            ? selectedSlug
+            : "",
+        intro: "",
+        isOpen: true,
+        lookingFor: "",
+        contactUrl: "",
+      });
 
-    setShowCreateForm(false);
+      setShowCreateForm(false);
+      await fetchTeams();
+    } catch (error) {
+      console.error(error);
+      alert("팀 생성 실패");
+    }
   };
 
-  const handleDeletePost = (teamCode) => {
+  const confirmNoticeModal = async () => {
+    const { mode, targetUrl } = noticeModal;
+    closeNoticeModal();
+
+    if (mode === "create") {
+      await createTeamPost();
+      return;
+    }
+
+    if (mode === "contact" && targetUrl) {
+      window.open(targetUrl, "_blank", "noopener,noreferrer");
+    }
+  };
+
+  const handleDeletePost = async (team) => {
     const ok = window.confirm("이 모집글을 삭제할까요?");
     if (!ok) return;
 
-    setCustomTeams((prev) => prev.filter((team) => team.teamCode !== teamCode));
+    if (!team.id) {
+      alert("기본 데이터는 삭제할 수 없습니다.");
+      return;
+    }
+
+    try {
+      await deleteDoc(doc(db, "teams", team.id));
+      await fetchTeams();
+    } catch (error) {
+      console.error(error);
+      alert("삭제에 실패했습니다.");
+    }
   };
 
-  const handleCloseRecruit = (teamCode) => {
-    setCustomTeams((prev) =>
-      prev.map((team) =>
-        team.teamCode === teamCode ? { ...team, isOpen: false } : team
-      )
-    );
+  const handleCloseRecruit = async (team) => {
+    if (!team.id) {
+      alert("기본 데이터는 수정할 수 없습니다.");
+      return;
+    }
+
+    try {
+      await updateDoc(doc(db, "teams", team.id), {
+        isOpen: false,
+      });
+      await fetchTeams();
+    } catch (error) {
+      console.error(error);
+      alert("모집 마감 처리에 실패했습니다.");
+    }
   };
 
   const formIsValid = newPost.teamName.trim() && newPost.intro.trim();
@@ -651,7 +757,7 @@ export default function CampPage() {
               }}
             >
               <p style={{ margin: 0, color: "#374151" }}>
-                로그인하지 않아도 작성은 가능하지만, 작성자는 게스트로 저장됩니다.
+                팀 모집글 작성은 로그인한 사용자만 가능합니다.
               </p>
             </div>
           )}
@@ -841,14 +947,14 @@ export default function CampPage() {
               onClick={openCreateNoticeModal}
               disabled={!formIsValid}
               style={{
-              padding: "10px 14px",
-              borderRadius: "8px",
-              border: "1px solid #111827",
-              backgroundColor: formIsValid ? "#111827" : "#9ca3af",
-              color: "#ffffff",
-              cursor: formIsValid ? "pointer" : "not-allowed",
-              fontSize: "14px",
-              fontWeight: 600,
+                padding: "10px 14px",
+                borderRadius: "8px",
+                border: "1px solid #111827",
+                backgroundColor: formIsValid ? "#111827" : "#9ca3af",
+                color: "#ffffff",
+                cursor: formIsValid ? "pointer" : "not-allowed",
+                fontSize: "14px",
+                fontWeight: 600,
               }}
             >
               모집글 생성
@@ -889,7 +995,27 @@ export default function CampPage() {
             </p>
           </div>
 
-          {hackathonRecruitTeams.length === 0 ? (
+          {loading ? (
+            <div
+              style={{
+                padding: "24px 0",
+                textAlign: "center",
+                color: "#6b7280",
+              }}
+            >
+              <p style={{ margin: 0 }}>팀 목록을 불러오는 중입니다...</p>
+            </div>
+          ) : error ? (
+            <div
+              style={{
+                padding: "24px 0",
+                textAlign: "center",
+                color: "#dc2626",
+              }}
+            >
+              <p style={{ margin: 0 }}>{error}</p>
+            </div>
+          ) : hackathonRecruitTeams.length === 0 ? (
             <div
               style={{
                 padding: "24px 0",
@@ -904,11 +1030,12 @@ export default function CampPage() {
             <div style={{ display: "grid", gap: "16px" }}>
               {hackathonRecruitTeams.map((team) => (
                 <TeamRecruitCard
-                  key={`${team.teamCode}-${team.createdAt}`}
+                  key={team.id || `${team.teamCode}-${String(team.createdAt)}`}
                   team={team}
                   onDelete={handleDeletePost}
                   onClose={handleCloseRecruit}
                   onContact={openContactNoticeModal}
+                  currentUser={user}
                 />
               ))}
             </div>
@@ -939,7 +1066,27 @@ export default function CampPage() {
             </p>
           </div>
 
-          {freeRecruitTeams.length === 0 ? (
+          {loading ? (
+            <div
+              style={{
+                padding: "24px 0",
+                textAlign: "center",
+                color: "#6b7280",
+              }}
+            >
+              <p style={{ margin: 0 }}>팀 목록을 불러오는 중입니다...</p>
+            </div>
+          ) : error ? (
+            <div
+              style={{
+                padding: "24px 0",
+                textAlign: "center",
+                color: "#dc2626",
+              }}
+            >
+              <p style={{ margin: 0 }}>{error}</p>
+            </div>
+          ) : freeRecruitTeams.length === 0 ? (
             <div
               style={{
                 padding: "24px 0",
@@ -954,17 +1101,19 @@ export default function CampPage() {
             <div style={{ display: "grid", gap: "16px" }}>
               {freeRecruitTeams.map((team) => (
                 <TeamRecruitCard
-                  key={`${team.teamCode}-${team.createdAt}`}
+                  key={team.id || `${team.teamCode}-${String(team.createdAt)}`}
                   team={team}
                   onDelete={handleDeletePost}
                   onClose={handleCloseRecruit}
                   onContact={openContactNoticeModal}
+                  currentUser={user}
                 />
               ))}
             </div>
           )}
         </div>
       </section>
+
       {noticeModal.open && (
         <div
           style={{
