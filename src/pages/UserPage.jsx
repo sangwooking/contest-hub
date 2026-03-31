@@ -52,9 +52,11 @@ export default function UserPage() {
   const [selectedMenu, setSelectedMenu] = useState("profile");
   const [pageUser, setPageUser] = useState(null);
   const [profileLoading, setProfileLoading] = useState(true);
+  const [profileError, setProfileError] = useState("");
 
   const [guestbookList, setGuestbookList] = useState([]);
   const [guestbookLoading, setGuestbookLoading] = useState(true);
+  const [guestbookError, setGuestbookError] = useState("");
   const [guestbookInput, setGuestbookInput] = useState("");
   const [guestbookSubmitting, setGuestbookSubmitting] = useState(false);
 
@@ -65,11 +67,13 @@ export default function UserPage() {
       if (!targetUserId) {
         setPageUser(null);
         setProfileLoading(false);
+        setProfileError("");
         return;
       }
 
       try {
         setProfileLoading(true);
+        setProfileError("");
 
         const userRef = doc(db, "users", targetUserId);
         const userSnap = await getDoc(userRef);
@@ -80,7 +84,7 @@ export default function UserPage() {
           setPageUser({
             id: userSnap.id,
             nickname: data.nickname || "닉네임 없음",
-            email: data.email || "-",
+            email: data.email || user?.email || "-",
             bio: data.bio || "자기소개가 없습니다.",
             profileImage: data.profileImage || data.photoURL || "",
             messages: data.messages || [],
@@ -99,9 +103,10 @@ export default function UserPage() {
             awards: [],
           });
         }
-      } catch (error) {
-        console.error("사용자 정보 조회 실패:", error);
+      } catch (fetchError) {
+        console.error("사용자 정보 조회 실패:", fetchError);
         setPageUser(null);
+        setProfileError("사용자 정보를 불러오지 못했습니다.");
       } finally {
         setProfileLoading(false);
       }
@@ -114,10 +119,12 @@ export default function UserPage() {
     if (!targetUserId) {
       setGuestbookList([]);
       setGuestbookLoading(false);
+      setGuestbookError("");
       return;
     }
 
     setGuestbookLoading(true);
+    setGuestbookError("");
 
     const guestbookRef = collection(db, "users", targetUserId, "guestbook");
     const guestbookQuery = query(guestbookRef, orderBy("createdAt", "desc"));
@@ -131,11 +138,13 @@ export default function UserPage() {
         }));
         setGuestbookList(nextList);
         setGuestbookLoading(false);
+        setGuestbookError("");
       },
-      (error) => {
-        console.error("방명록 실시간 조회 실패:", error);
+      (snapshotError) => {
+        console.error("방명록 실시간 조회 실패:", snapshotError);
         setGuestbookList([]);
         setGuestbookLoading(false);
+        setGuestbookError("방명록을 불러오지 못했습니다.");
       }
     );
 
@@ -246,8 +255,8 @@ export default function UserPage() {
       });
 
       setGuestbookInput("");
-    } catch (error) {
-      console.error("방명록 작성 실패:", error);
+    } catch (submitError) {
+      console.error("방명록 작성 실패:", submitError);
       alert("방명록 등록에 실패했습니다.");
     } finally {
       setGuestbookSubmitting(false);
@@ -257,71 +266,41 @@ export default function UserPage() {
   if (!isLoggedIn) {
     return (
       <div>
-  <div style={{ marginBottom: "20px" }}>
-    <h1 style={{ marginBottom: "8px" }}>마이페이지</h1>
-    <p style={{ margin: 0, color: "#6b7280" }}>
-      내 정보와 활동 현황을 확인할 수 있습니다.
-    </p>
-  </div>
-
-<<<<<<< HEAD
-        <section
-          style={{
-            border: "1px solid #e5e7eb",
-            borderRadius: "12px",
-            padding: "24px",
-            backgroundColor: "#ffffff",
-            maxWidth: "560px",
-          }}
-        >
-          <p style={{ margin: "0 0 16px 0", color: "#374151", lineHeight: 1.6 }}>
-            로그인하면 내 프로필, 방명록, 쪽지함, 참여/수상내역을 확인할 수 있어.
+        <div style={{ marginBottom: "20px" }}>
+          <h1 style={{ marginBottom: "8px" }}>마이페이지</h1>
+          <p style={{ margin: 0, color: "#6b7280" }}>
+            내 정보와 활동 현황을 확인할 수 있습니다.
           </p>
+        </div>
 
-          <Link
-            to="/login"
-            style={{
-              display: "inline-block",
-              padding: "10px 14px",
-              borderRadius: "8px",
-              backgroundColor: "#111827",
-              color: "#ffffff",
-              textDecoration: "none",
-              fontWeight: 600,
-            }}
-          >
-            로그인하러 가기
-          </Link>
-        </section>
-=======
-  <DataBoundary
-    loading={loading}
-    error={error}
-    isEmpty={!isLoggedIn}
-    loadingTitle="로그인 정보를 확인하는 중입니다"
-    loadingMessage="사용자 정보를 불러오고 있어요."
-    errorTitle="로그인 정보를 불러오지 못했습니다"
-    emptyTitle="로그인이 필요합니다"
-    emptyMessage="마이페이지를 보려면 먼저 로그인해 주세요."
-    emptyAction={
-      <Link
-        to="/login"
-        style={{
-          display: "inline-block",
-          padding: "10px 14px",
-          borderRadius: "8px",
-          backgroundColor: "#111827",
-          color: "#ffffff",
-          textDecoration: "none",
-          fontWeight: 600,
-        }}
-      >
-        로그인하러 가기
-      </Link>
-    }
-  >
-    </DataBoundary>
->>>>>>> feature/C
+        <DataBoundary
+          loading={loading}
+          error={error}
+          isEmpty={!isLoggedIn}
+          loadingTitle="로그인 정보를 확인하는 중입니다"
+          loadingMessage="사용자 정보를 불러오고 있어요."
+          errorTitle="로그인 정보를 불러오지 못했습니다"
+          emptyTitle="로그인이 필요합니다"
+          emptyMessage="로그인하면 내 프로필, 방명록, 쪽지함, 참여/수상내역을 확인할 수 있어."
+          emptyAction={
+            <Link
+              to="/login"
+              style={{
+                display: "inline-block",
+                padding: "10px 14px",
+                borderRadius: "8px",
+                backgroundColor: "#111827",
+                color: "#ffffff",
+                textDecoration: "none",
+                fontWeight: 600,
+              }}
+            >
+              로그인하러 가기
+            </Link>
+          }
+        >
+          <div />
+        </DataBoundary>
       </div>
     );
   }
@@ -329,51 +308,38 @@ export default function UserPage() {
   if (profileLoading) {
     return (
       <div>
-        <h1 style={{ marginBottom: "12px" }}>마이페이지</h1>
-        <p style={{ color: "#6b7280" }}>사용자 정보를 불러오는 중입니다...</p>
+        <h1 style={{ marginBottom: "12px" }}>
+          {userId ? "사용자 페이지" : "마이페이지"}
+        </h1>
+        <StatusMessage
+          type="loading"
+          title="사용자 정보를 불러오는 중입니다"
+          message="프로필과 활동 정보를 준비하고 있어요."
+        />
       </div>
     );
   }
 
-<<<<<<< HEAD
+  if (profileError) {
+    return (
+      <div>
+        <h1 style={{ marginBottom: "12px" }}>
+          {userId ? "사용자 페이지" : "마이페이지"}
+        </h1>
+        <StatusMessage
+          type="error"
+          title="사용자 정보를 불러오지 못했습니다"
+          message={profileError}
+        />
+      </div>
+    );
+  }
+
   const renderTabContent = () => {
     if (selectedMenu === "profile") {
       return (
         <div style={{ display: "grid", gap: "20px" }}>
           <div
-=======
-      <section
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-          gap: "20px",
-          marginBottom: "20px",
-        }}
-      >
-        <div
-          style={{
-            border: "1px solid #e5e7eb",
-            borderRadius: "12px",
-            padding: "20px",
-            backgroundColor: "#ffffff",
-          }}
-        >
-          <h2 style={{ marginTop: 0, marginBottom: "16px" }}>프로필</h2>
-
-          <p style={{ margin: "0 0 12px 0" }}>
-            <strong>닉네임:</strong> {user?.nickname || "없음"}
-          </p>
-          <p style={{ margin: "0 0 12px 0" }}>
-            <strong>이메일:</strong> {user?.email || "없음"}
-          </p>
-          <p style={{ margin: "0 0 20px 0" }}>
-            <strong>소개:</strong> {user?.bio || "자기소개가 없습니다."}
-          </p>
-
-          <button
-            type="button"
-            onClick={logout}
->>>>>>> feature/C
             style={{
               border: "1px solid #e5e7eb",
               borderRadius: "12px",
@@ -471,21 +437,57 @@ export default function UserPage() {
                 gap: "12px",
               }}
             >
-              <div style={{ borderRadius: "10px", padding: "14px", backgroundColor: "#f8fafc", border: "1px solid #e5e7eb" }}>
+              <div
+                style={{
+                  borderRadius: "10px",
+                  padding: "14px",
+                  backgroundColor: "#f8fafc",
+                  border: "1px solid #e5e7eb",
+                }}
+              >
                 <p style={{ margin: "0 0 8px 0", color: "#6b7280" }}>작성 모집글</p>
-                <p style={{ margin: 0, fontSize: "24px", fontWeight: 700 }}>{activitySummary.total}</p>
+                <p style={{ margin: 0, fontSize: "24px", fontWeight: 700 }}>
+                  {activitySummary.total}
+                </p>
               </div>
-              <div style={{ borderRadius: "10px", padding: "14px", backgroundColor: "#f8fafc", border: "1px solid #e5e7eb" }}>
+              <div
+                style={{
+                  borderRadius: "10px",
+                  padding: "14px",
+                  backgroundColor: "#f8fafc",
+                  border: "1px solid #e5e7eb",
+                }}
+              >
                 <p style={{ margin: "0 0 8px 0", color: "#6b7280" }}>모집중</p>
-                <p style={{ margin: 0, fontSize: "24px", fontWeight: 700 }}>{activitySummary.open}</p>
+                <p style={{ margin: 0, fontSize: "24px", fontWeight: 700 }}>
+                  {activitySummary.open}
+                </p>
               </div>
-              <div style={{ borderRadius: "10px", padding: "14px", backgroundColor: "#f8fafc", border: "1px solid #e5e7eb" }}>
+              <div
+                style={{
+                  borderRadius: "10px",
+                  padding: "14px",
+                  backgroundColor: "#f8fafc",
+                  border: "1px solid #e5e7eb",
+                }}
+              >
                 <p style={{ margin: "0 0 8px 0", color: "#6b7280" }}>모집마감</p>
-                <p style={{ margin: 0, fontSize: "24px", fontWeight: 700 }}>{activitySummary.closed}</p>
+                <p style={{ margin: 0, fontSize: "24px", fontWeight: 700 }}>
+                  {activitySummary.closed}
+                </p>
               </div>
-              <div style={{ borderRadius: "10px", padding: "14px", backgroundColor: "#f8fafc", border: "1px solid #e5e7eb" }}>
+              <div
+                style={{
+                  borderRadius: "10px",
+                  padding: "14px",
+                  backgroundColor: "#f8fafc",
+                  border: "1px solid #e5e7eb",
+                }}
+              >
                 <p style={{ margin: "0 0 8px 0", color: "#6b7280" }}>자유 모집글</p>
-                <p style={{ margin: 0, fontSize: "24px", fontWeight: 700 }}>{activitySummary.free}</p>
+                <p style={{ margin: 0, fontSize: "24px", fontWeight: 700 }}>
+                  {activitySummary.free}
+                </p>
               </div>
             </div>
           </div>
@@ -540,7 +542,6 @@ export default function UserPage() {
                 로그인한 사용자는 누구나 방명록을 남길 수 있습니다.
               </p>
 
-<<<<<<< HEAD
               <button
                 type="submit"
                 disabled={guestbookSubmitting}
@@ -560,19 +561,16 @@ export default function UserPage() {
             </div>
           </form>
 
-          {guestbookLoading ? (
-            <p style={{ margin: 0, color: "#6b7280" }}>방명록을 불러오는 중입니다...</p>
-          ) : guestbookList.length === 0 ? (
-            <p style={{ margin: 0, color: "#6b7280" }}>아직 작성된 방명록이 없습니다.</p>
-=======
-          {myTeams.length === 0 ? (
-            <StatusMessage
-              type="empty"
-              title="작성한 모집글이 없어요"
-              message="아직 작성한 모집글이 없습니다."
-            />
->>>>>>> feature/C
-          ) : (
+          <DataBoundary
+            loading={guestbookLoading}
+            error={guestbookError}
+            isEmpty={!guestbookLoading && !guestbookError && guestbookList.length === 0}
+            loadingTitle="방명록을 불러오는 중입니다"
+            loadingMessage="최신 방명록을 가져오고 있어요."
+            errorTitle="방명록을 불러오지 못했습니다"
+            emptyTitle="방명록이 아직 없어요"
+            emptyMessage="첫 번째 방명록을 남겨보세요."
+          >
             <div style={{ display: "grid", gap: "14px" }}>
               {guestbookList.map((item) => (
                 <article
@@ -605,20 +603,32 @@ export default function UserPage() {
                 </article>
               ))}
             </div>
-          )}
+          </DataBoundary>
         </div>
       );
     }
 
     if (selectedMenu === "messages") {
       return (
-        <div style={{ border: "1px solid #e5e7eb", borderRadius: "12px", padding: "20px", backgroundColor: "#ffffff" }}>
+        <div
+          style={{
+            border: "1px solid #e5e7eb",
+            borderRadius: "12px",
+            padding: "20px",
+            backgroundColor: "#ffffff",
+          }}
+        >
           <h2 style={{ marginTop: 0, marginBottom: "16px" }}>쪽지함</h2>
-          <div style={{ display: "grid", gap: "14px" }}>
-            {messageList.length === 0 ? (
-              <p style={{ margin: 0, color: "#6b7280" }}>받은 쪽지가 없습니다.</p>
-            ) : (
-              messageList.map((item) => (
+
+          {messageList.length === 0 ? (
+            <StatusMessage
+              type="empty"
+              title="받은 쪽지가 없어요"
+              message="아직 도착한 쪽지가 없습니다."
+            />
+          ) : (
+            <div style={{ display: "grid", gap: "14px" }}>
+              {messageList.map((item) => (
                 <article
                   key={item.id}
                   style={{
@@ -646,9 +656,9 @@ export default function UserPage() {
                     {item.content}
                   </p>
                 </article>
-              ))
-            )}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       );
     }
@@ -656,10 +666,21 @@ export default function UserPage() {
     if (selectedMenu === "history") {
       return (
         <div style={{ display: "grid", gap: "20px" }}>
-          <div style={{ border: "1px solid #e5e7eb", borderRadius: "12px", padding: "20px", backgroundColor: "#ffffff" }}>
+          <div
+            style={{
+              border: "1px solid #e5e7eb",
+              borderRadius: "12px",
+              padding: "20px",
+              backgroundColor: "#ffffff",
+            }}
+          >
             <h2 style={{ marginTop: 0, marginBottom: "16px" }}>참여 내역</h2>
             {historyData.participations.length === 0 ? (
-              <p style={{ margin: 0, color: "#6b7280" }}>참여 내역이 없습니다.</p>
+              <StatusMessage
+                type="empty"
+                title="참여 내역이 없어요"
+                message="아직 등록된 참여 이력이 없습니다."
+              />
             ) : (
               <div style={{ display: "grid", gap: "14px" }}>
                 {historyData.participations.map((item) => (
@@ -672,7 +693,9 @@ export default function UserPage() {
                       backgroundColor: "#ffffff",
                     }}
                   >
-                    <h3 style={{ margin: "0 0 8px 0", fontSize: "17px" }}>{item.title}</h3>
+                    <h3 style={{ margin: "0 0 8px 0", fontSize: "17px" }}>
+                      {item.title}
+                    </h3>
                     <p style={{ margin: "0 0 6px 0", color: "#374151" }}>
                       <strong>역할:</strong> {item.role}
                     </p>
@@ -683,10 +706,21 @@ export default function UserPage() {
             )}
           </div>
 
-          <div style={{ border: "1px solid #e5e7eb", borderRadius: "12px", padding: "20px", backgroundColor: "#ffffff" }}>
+          <div
+            style={{
+              border: "1px solid #e5e7eb",
+              borderRadius: "12px",
+              padding: "20px",
+              backgroundColor: "#ffffff",
+            }}
+          >
             <h2 style={{ marginTop: 0, marginBottom: "16px" }}>수상 내역</h2>
             {historyData.awards.length === 0 ? (
-              <p style={{ margin: 0, color: "#6b7280" }}>수상 내역이 없습니다.</p>
+              <StatusMessage
+                type="empty"
+                title="수상 내역이 없어요"
+                message="아직 등록된 수상 이력이 없습니다."
+              />
             ) : (
               <div style={{ display: "grid", gap: "14px" }}>
                 {historyData.awards.map((item) => (
@@ -699,7 +733,9 @@ export default function UserPage() {
                       backgroundColor: "#ffffff",
                     }}
                   >
-                    <h3 style={{ margin: "0 0 8px 0", fontSize: "17px" }}>{item.title}</h3>
+                    <h3 style={{ margin: "0 0 8px 0", fontSize: "17px" }}>
+                      {item.title}
+                    </h3>
                     <p style={{ margin: "0 0 6px 0", color: "#374151" }}>
                       <strong>수상:</strong> {item.awardName}
                     </p>
