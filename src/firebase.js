@@ -9,8 +9,8 @@ import { getAnalytics } from "firebase/analytics";
 // Your web app's Firebase configuration
 // For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
-  apiKey: "AIzaSyBn4BWr3bn_eYJFr9jWP9MKjyqq9g6Hz-0",
-  authDomain: "contest-hub-7ff9f.firebaseapp.com",
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
   projectId: "contest-hub-7ff9f",
   storageBucket: "contest-hub-7ff9f.firebasestorage.app",
   messagingSenderId: "530520822199",
